@@ -1,0 +1,112 @@
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[project]
+name = "maite-models"
+version = "0.1.0"
+description = "maite-models — dataset utilities built on the maite protocols"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "TODO" },
+]
+keywords = [
+    "jatic",
+    "artificial intelligence",
+    "maite",
+    "datasets",
+    "models"
+]
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+requires-python = ">=3.10, <3.13"
+dynamic = ["dependencies"]
+
+[tool.poetry]
+packages = [{ include = "maite_models", from = "src" }]
+include = ["src/maite_models/py.typed"]
+
+[tool.poetry.dependencies]
+maite = "*"  # pin to a specific release once confirmed
+
+[tool.poetry.group.dev.dependencies]
+pre-commit = ">=3.0.0"
+pyright    = { extras = ["nodejs"], version = ">=1.1.400,!=1.1.401" }
+virtualenv = ">=20.26.6"
+
+[tool.poetry.group.test.dependencies]
+pytest      = ">=8.3.0"
+pytest-cov  = ">=4.0.0"
+pytest-mock = ">=3.6.1"
+
+[tool.poetry.group.docs.dependencies]
+mkdocs               = ">=1.6.1"
+mkdocs-material      = ">=9.6.4"
+pymdown-extensions   = ">=10.14.3"
+
+# ── Linting / formatting ──────────────────────────────────────────────────────
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+
+[tool.pyright]
+reportMissingImports = "warning"
+reportUnnecessaryTypeIgnoreComment = "error"
+include = ["src"]
+exclude = ["tests"]
+
+[tool.ruff]
+line-length    = 120
+indent-width   = 4
+target-version = "py311"
+extend-include = ["*.ipynb"]
+
+[tool.ruff.lint]
+select = [
+    "F", "E", "W", "C90", "I", "N", "D200", "D201", "D211", "D403", "D419", "UP",
+    "YTT", "ANN", "S", "BLE", "B", "A", "COM", "C4", "T10", "ISC", "ICN", "PYI", "PT", "Q",
+    "RSE", "RET", "SLF", "SIM", "TID252", "ARG", "PD", "FLY", "NPY", "RUF027",
+    "RUF100", "PERF",
+]
+ignore    = ["ANN101", "ANN102", "ANN401", "COM812", "ISC001", "UP038"]
+fixable   = ["ALL"]
+unfixable = []
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.extend-per-file-ignores]
+"**/tests/*" = [
+    "ANN", "D", "ARG", "SIM", "C90", "SLF001",
+    "S101", "A001", "E501", "PT007", "PT011",
+]
+
+[tool.ruff.format]
+quote-style                = "double"
+indent-style               = "space"
+skip-magic-trailing-comma  = false
+line-ending                = "auto"
+docstring-code-format      = true
+docstring-code-line-length = "dynamic"
+
+[tool.ruff.lint.isort]
+known-first-party = ["maite_models"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+
+[tool.pytest.ini_options]
+minversion   = "6.0"
+addopts      = "-ra --tb=short"
+testpaths    = ["tests"]
+xfail_strict = true
+
+[tool.coverage.run]
+source = ["maite_models"]

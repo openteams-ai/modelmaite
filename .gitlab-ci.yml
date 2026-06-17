@@ -1,0 +1,130 @@
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+default:
+  retry: 1
+  artifacts:
+    expire_in: 1 week
+
+variables:
+  GIT_DEPTH: 1
+
+stages:
+  - pre-commit
+  - pyright
+  - test
+  - docs
+  - dr-compliance
+
+# ── Reusable anchors ──────────────────────────────────────────────────────────
+
+.git_config: &git_config
+ # Trust the GitLab checkout for build backends that call git to derive package metadata.
+  - git config --global --add safe.directory "$CI_PROJECT_DIR"
+
+.shared-setup:
+  interruptible: true
+  allow_failure: false
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: on_success
+    - when: never
+
+.python-matrix:
+  parallel:
+    matrix:
+      - VERSION: ["3.10", "3.11", "3.12"]
+  image: python:$VERSION
+
+.poetry-setup:
+  before_script:
+    - *git_config
+    - export PATH=${HOME}/.local/bin:${PATH}
+    - pip install --upgrade pip
+    - pip install --user -U poetry==2.1.2
+    - poetry config virtualenvs.in-project true
+    - python --version
+    - pip --version
+    - poetry --version
+    - poetry check
+
+# ── Jobs ──────────────────────────────────────────────────────────────────────
+
+test:
+  extends: [.python-matrix, .shared-setup, .poetry-setup]
+  stage: test
+  needs: []
+  script:
+    - poetry install --with dev,test
+    - poetry run pytest tests -vvv --cov=maite_models --cov-report term-missing
+  coverage: '/TOTAL.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+
+pyright-internal:
+  extends: [.shared-setup, .poetry-setup]
+  image: python:3.11
+  stage: pyright
+  needs: []
+  script:
+    - poetry install --with dev
+    - poetry run pyright src/
+
+# Deploy docs preview on merge requests
+pages-branch:
+  extends: [.shared-setup, .poetry-setup]
+  image: python:3.11
+  stage: docs
+  needs: []
+  artifacts:
+    expose_as: 'Documentation Build'
+    paths:
+      - public/
+  environment:
+    name: docs-preview/$CI_MERGE_REQUEST_IID
+    url: "https://jatic.pages.jatic.net/-/orchestration-interoperability/$CI_PROJECT_NAME/-/jobs/$CI_JOB_ID/artifacts/public/index.html"
+    auto_stop_in: 1 week
+  script:
+    - poetry install --with docs --no-cache
+    - poetry run mkdocs build -d public --no-directory-urls
+  variables:
+    PUBLIC_URL: "/-/orchestration-interoperability/$CI_PROJECT_NAME/-/jobs/$CI_JOB_ID/artifacts/public/"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: never
+
+# Deploy production docs on merge to default branch
+pages:
+  extends: [.shared-setup, .poetry-setup]
+  image: python:3.11
+  stage: docs
+  needs: []
+  script:
+    - poetry install --with docs --no-cache
+    - poetry run mkdocs build -d public --no-directory-urls
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ── DevSecOps components ──────────────────────────────────────────────────────
+
+include:
+  - component: gitlab.jatic.net/jatic/devsecops/components/pre-commit@1.1.0
+    inputs:
+      stage: pre-commit
+      project_path: "jatic/orchestration-interoperability/maite-models"
+      allow_failure: false
+
+  - component: gitlab.jatic.net/jatic/devsecops/components/dr-compliance@0.5.2
+    inputs:
+      stage: dr-compliance
+      sast_excluded_paths: tests
+      sast_search_max_depth: "4"
+      image: harbor.jatic.net:443/platform-team/base-images/python-base-image:3.11
+      full_execution_on_commit: true
+      allow_failure: true

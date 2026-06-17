@@ -1,0 +1,29 @@
+# Pre-commit configuration aligned with the DevSecOps pattern
+# (https://gitlab.jatic.net/jatic/devsecops/example-package/-/blob/main/.pre-commit-config.yaml).
+#
+# Philosophy: pre-commit handles only fast, auto-fixable formatting/linting via
+# ruff. Broader checks live in the DevSecOps compliance components:
+#   - SAST / security        -> dsor-compliance
+#   - pyproject.toml / poetry / installability -> sr-compliance
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6  # matches the version of Ruff in the DevSecOps Team's base images
+    hooks:
+      # Run the linter
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      # Run the formatter
+      - id: ruff-format
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: '1.7.9'
+    hooks:
+      - id: bandit
+        additional_dependencies: ['.[toml]']
+        args: [-c, pyproject.toml, -r, src]  # pull config from pyproject.toml; scan src only
+
+  - repo: https://github.com/python-poetry/poetry
+    rev: '2.1.2'
+    hooks:
+      - id: poetry-check
