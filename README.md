@@ -1,16 +1,6 @@
-# maite-models
+# modelmaite - MAITE-compliant model wrappers
 
-`maite-models` is a Python package providing dataset utilities built on the
+`modelmaite` is a Python package providing model utilities built on the
 [maite](https://mit-ll-ai-technology.github.io/maite/) protocols.
 
-## Installation
-
-TODO: Add installation instructions once the package is published.
-
-## Usage
-
-TODO: Add usage examples.
-
-## Contributing
-
-TODO: Add contribution guide.
+**THIS PACKAGE IS CURRENTLY UNDER CONSTRUCTION**

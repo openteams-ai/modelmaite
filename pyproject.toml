@@ -3,9 +3,9 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [project]
-name = "maite-models"
+name = "modelmaite"
 version = "0.1.0"
-description = "maite-models — dataset utilities built on the maite protocols"
+description = "modelmaite — dataset utilities built on the maite protocols"
 readme = "README.md"
 license = { text = "Apache-2.0" }
 authors = [
@@ -29,8 +29,8 @@ requires-python = ">=3.10, <3.13"
 dynamic = ["dependencies"]
 
 [tool.poetry]
-packages = [{ include = "maite_models", from = "src" }]
-include = ["src/maite_models/py.typed"]
+packages = [{ include = "modelmaite", from = "src" }]
+include = ["src/modelmaite/py.typed"]
 
 [tool.poetry.dependencies]
 maite = "*"  # pin to a specific release once confirmed
@@ -95,7 +95,7 @@ docstring-code-format      = true
 docstring-code-line-length = "dynamic"
 
 [tool.ruff.lint.isort]
-known-first-party = ["maite_models"]
+known-first-party = ["modelmaite"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
@@ -109,4 +109,4 @@ testpaths    = ["tests"]
 xfail_strict = true
 
 [tool.coverage.run]
-source = ["maite_models"]
+source = ["modelmaite"]

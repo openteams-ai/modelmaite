@@ -60,7 +60,7 @@ test:
   needs: []
   script:
     - poetry install --with dev,test
-    - poetry run pytest tests -vvv --cov=maite_models --cov-report term-missing
+    - poetry run pytest tests -vvv --cov=modelmaite --cov-report term-missing
   coverage: '/TOTAL.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
 
 pyright-internal:
@@ -117,7 +117,7 @@ include:
   - component: gitlab.jatic.net/jatic/devsecops/components/pre-commit@1.1.0
     inputs:
       stage: pre-commit
-      project_path: "jatic/orchestration-interoperability/maite-models"
+      project_path: "jatic/orchestration-interoperability/modelmaite"
       allow_failure: false
 
   - component: gitlab.jatic.net/jatic/devsecops/components/dr-compliance@0.5.2
