@@ -9,16 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- JATIC_ONNX v1 object-detection wrapper (`modelmaite.object_detection.OnnxODModel`) that exposes ONNX Runtime models as MAITE-compatible object-detection models.
+- Torchvision image-classification wrapper (`modelmaite.image_classification.TorchvisionICModel`) that exposes torchvision models as MAITE-compatible image-classification models.
+- JATIC_ONNX v1 image-classification wrapper (`modelmaite.image_classification.OnnxICModel`) and object-detection wrapper (`modelmaite.object_detection.OnnxODModel`) that expose ONNX Runtime models as MAITE-compatible models.
 - ONNX metadata/model-output validation, provider selection, image normalization/channel conversion/resizing utilities, and a MAITE-compatible `DetectionTarget` type.
-- Object-detection `load_models` dispatch for JATIC_ONNX model specifications.
-- Optional `onnx` and `onnx-cuda` extras, plus deterministic ONNX fixture coverage for wrapper inference.
+- Image-classification and object-detection `load_models` dispatch for JATIC_ONNX and torchvision model specifications.
+- Optional `onnx`, `onnx-cuda`, and `torchvision` extras, plus deterministic ONNX/fake-torchvision coverage for wrapper inference.
 
 ### Changed
 
-- Project metadata now describes model wrappers, uses the OpenTeams author, removes dataset-specific keywords, declares `numpy` as the runtime dependency, and keeps `maite` in test dependencies only.
+- Project metadata now describes model wrappers, uses the OpenTeams author, removes dataset-specific keywords, declares `numpy` and `typing-extensions` as runtime dependencies, and keeps `maite` in test dependencies only.
 - Ruff configuration drops stale rule references that are no longer used by the configured Ruff version.
 
 ### Documentation
 
-- README and docs now document ONNX wrapper usage and use Poetry for install commands.
+- README and docs now document torchvision and image-classification/object-detection ONNX wrapper usage and use Poetry for install commands.

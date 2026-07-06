@@ -17,5 +17,11 @@ poetry add "modelmaite[onnx]"
 
 ## Usage
 
+Use `modelmaite.image_classification.TorchvisionICModel` to wrap torchvision
+image-classification models as MAITE-compatible image-classification models.
+
+Use `modelmaite.image_classification.OnnxICModel` to wrap JATIC_ONNX v1
+image-classification models as MAITE-compatible image-classification models.
+
 Use `modelmaite.object_detection.OnnxODModel` to wrap JATIC_ONNX v1
 object-detection models as MAITE-compatible object-detection models.
