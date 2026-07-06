@@ -5,17 +5,16 @@ build-backend = "poetry.core.masonry.api"
 [project]
 name = "modelmaite"
 version = "0.1.0"
-description = "modelmaite — dataset utilities built on the maite protocols"
+description = "MAITE-compliant model wrappers built on the maite protocols"
 readme = "README.md"
 license = { text = "Apache-2.0" }
 authors = [
-    { name = "TODO" },
+    { name = "OpenTeams" },
 ]
 keywords = [
     "jatic",
     "artificial intelligence",
     "maite",
-    "datasets",
     "models"
 ]
 classifiers = [
@@ -28,12 +27,22 @@ classifiers = [
 requires-python = ">=3.10, <3.13"
 dynamic = ["dependencies"]
 
+[project.optional-dependencies]
+onnx = [
+    "onnx>=1.14.0",
+    "onnxruntime>=1.14.0,<1.24.0",
+]
+onnx-cuda = [
+    "onnx>=1.14.0",
+    "onnxruntime-gpu>=1.14.0,<1.24.0",
+]
+
 [tool.poetry]
 packages = [{ include = "modelmaite", from = "src" }]
 include = ["src/modelmaite/py.typed"]
 
 [tool.poetry.dependencies]
-maite = "*"  # pin to a specific release once confirmed
+numpy = ">=1.24"
 
 [tool.poetry.group.dev.dependencies]
 pre-commit = ">=3.0.0"
@@ -41,6 +50,7 @@ pyright    = { extras = ["nodejs"], version = ">=1.1.400,!=1.1.401" }
 virtualenv = ">=20.26.6"
 
 [tool.poetry.group.test.dependencies]
+maite       = ">=0.9,<0.10"
 pytest      = ">=8.3.0"
 pytest-cov  = ">=4.0.0"
 pytest-mock = ">=3.6.1"
@@ -71,10 +81,10 @@ extend-include = ["*.ipynb"]
 select = [
     "F", "E", "W", "C90", "I", "N", "D200", "D201", "D211", "D403", "D419", "UP",
     "YTT", "ANN", "S", "BLE", "B", "A", "COM", "C4", "T10", "ISC", "ICN", "PYI", "PT", "Q",
-    "RSE", "RET", "SLF", "SIM", "TID252", "ARG", "PD", "FLY", "NPY", "RUF027",
-    "RUF100", "PERF",
+    "RSE", "RET", "SLF", "SIM", "TID252", "ARG", "PD", "FLY", "NPY", "RUF100",
+    "PERF",
 ]
-ignore    = ["ANN101", "ANN102", "ANN401", "COM812", "ISC001", "UP038"]
+ignore    = ["ANN401", "COM812", "ISC001", "UP038"]
 fixable   = ["ALL"]
 unfixable = []
 # Allow unused variables when underscore-prefixed.

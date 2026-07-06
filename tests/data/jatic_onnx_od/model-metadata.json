@@ -1,0 +1,24 @@
+{
+  "interface": {
+    "name": "JATIC_ONNX",
+    "version": "v1"
+  },
+  "io": {
+    "batchSize": 1,
+    "interface": "IMAGE_OBJECT_DETECTION",
+    "input": {
+      "channels": "RGB",
+      "height": 10,
+      "width": 20
+    },
+    "output": {
+      "nBoxes": 2,
+      "nClasses": 3
+    }
+  },
+  "index2label": {
+    "0": "background",
+    "1": "cat",
+    "2": "dog"
+  }
+}
