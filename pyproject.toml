@@ -40,13 +40,18 @@ torchvision = [
     "torch>=2.2.0",
     "torchvision>=0.17.0",
 ]
+visdrone = [
+    "httpx>=0.28.1",
+    "smqtk-detection>=0.22.0",
+    "torch>=2.2.0",
+]
 
 [tool.poetry]
 packages = [{ include = "modelmaite", from = "src" }]
 include = ["src/modelmaite/py.typed"]
 
 [tool.poetry.dependencies]
-numpy = ">=1.24"
+numpy = ">=1.24,<2"
 typing-extensions = ">=4.5"
 
 [tool.poetry.group.dev.dependencies]

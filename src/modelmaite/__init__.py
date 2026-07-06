@@ -1,6 +1,13 @@
 """modelmaite: model utilities built on the maite protocols."""
 
 from modelmaite.image_classification import OnnxICModel, TorchvisionICModel
-from modelmaite.object_detection import DetectionTarget, OnnxODModel
+from modelmaite.object_detection import DetectionTarget, OnnxODModel, TorchvisionODModel, VisdroneODModel
 
-__all__ = ["DetectionTarget", "OnnxICModel", "OnnxODModel", "TorchvisionICModel"]
+__all__ = [
+    "DetectionTarget",
+    "OnnxICModel",
+    "OnnxODModel",
+    "TorchvisionICModel",
+    "TorchvisionODModel",
+    "VisdroneODModel",
+]
