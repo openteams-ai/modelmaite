@@ -32,7 +32,7 @@ SUPPORTED_TORCHVISION_MODELS = {
     "resnext50_32x4d": "ResNeXt50_32X4D_Weights",
 }
 SUPPORTED_ONNX_MODELS = {"jatic_onnx"}
-TORCHVISION_INSTALL_HINT = 'Install TorchVision support with `poetry add "modelmaite[torchvision]"`.'
+TORCHVISION_INSTALL_HINT = 'Install TorchVision support with `uv add "modelmaite[torchvision]"`.'
 
 
 class TorchvisionICModel:

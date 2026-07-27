@@ -4,7 +4,7 @@
 # Philosophy: pre-commit handles only fast, auto-fixable formatting/linting via
 # ruff. Broader checks live in the DevSecOps compliance components:
 #   - SAST / security        -> dsor-compliance
-#   - pyproject.toml / poetry / installability -> sr-compliance
+#   - pyproject.toml / uv / installability -> sr-compliance
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -23,7 +23,8 @@ repos:
         additional_dependencies: ['.[toml]']
         args: [-c, pyproject.toml, -r, src]  # pull config from pyproject.toml; scan src only
 
-  - repo: https://github.com/python-poetry/poetry
-    rev: '2.1.2'
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: '0.9.24'  # keep in sync with the uv version pinned in .gitlab-ci.yml
     hooks:
-      - id: poetry-check
+      - id: uv-lock
+        args: [--check]  # verify uv.lock is up to date without modifying it

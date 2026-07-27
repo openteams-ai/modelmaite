@@ -10,8 +10,9 @@ default:
 
 variables:
   GIT_DEPTH: 1
-  # Pin Poetry to avoid silent drift; matches the pin used by .poetry-setup.
-  POETRY_PIN: "2.1.2"
+  # Pin uv to avoid silent drift; matches the pin used by .uv-setup and the
+  # uv-pre-commit rev in .pre-commit-config.yaml.
+  UV_PIN: "0.9.24"
   RELEASE_TAG:
     value: ""
     description: "Tag to publish to TestPyPI/PyPI from a manually triggered default-branch web pipeline."
@@ -47,52 +48,54 @@ stages:
       - VERSION: ["3.10", "3.11", "3.12"]
   image: python:$VERSION
 
-.poetry-setup:
+.uv-setup:
+  variables:
+    # Use the job image's interpreter; never download a managed Python.
+    UV_PYTHON_DOWNLOADS: "never"
   before_script:
     - *git_config
     - export PATH=${HOME}/.local/bin:${PATH}
     - pip install --upgrade pip
-    - pip install --user -U poetry==2.1.2
-    - poetry config virtualenvs.in-project true
+    - pip install --user -U uv==${UV_PIN}
     - python --version
     - pip --version
-    - poetry --version
-    - poetry check
+    - uv --version
+    - uv lock --check
 
 # ── Jobs ──────────────────────────────────────────────────────────────────────
 
 test:
-  extends: [.python-matrix, .shared-setup, .poetry-setup]
+  extends: [.python-matrix, .shared-setup, .uv-setup]
   stage: test
   needs: []
   script:
-    - poetry install --with dev,test
-    - poetry run pytest tests -vvv --cov=modelmaite --cov-report term-missing
+    - uv sync --locked --group test
+    - uv run --no-sync pytest tests -vvv --cov=modelmaite --cov-report term-missing
   coverage: '/TOTAL.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
 
 test-onnx:
-  extends: [.shared-setup, .poetry-setup]
+  extends: [.shared-setup, .uv-setup]
   image: python:3.11
   stage: test
   needs: []
   variables:
     MODELMAITE_REQUIRE_ONNX_RUNTIME: "1"
   script:
-    - poetry install --with dev,test --extras onnx
-    - poetry run pytest tests/test_onnx*.py -vvv
+    - uv sync --locked --group test --extra onnx
+    - uv run --no-sync pytest tests/test_onnx*.py -vvv
 
 pyright-internal:
-  extends: [.shared-setup, .poetry-setup]
+  extends: [.shared-setup, .uv-setup]
   image: python:3.11
   stage: pyright
   needs: []
   script:
-    - poetry install --with dev
-    - poetry run pyright src/
+    - uv sync --locked
+    - uv run --no-sync pyright src/
 
 # Deploy docs preview on merge requests
 pages-branch:
-  extends: [.shared-setup, .poetry-setup]
+  extends: [.shared-setup, .uv-setup]
   image: python:3.11
   stage: docs
   needs: []
@@ -105,8 +108,8 @@ pages-branch:
     url: "https://jatic.pages.jatic.net/-/orchestration-interoperability/$CI_PROJECT_NAME/-/jobs/$CI_JOB_ID/artifacts/public/index.html"
     auto_stop_in: 1 week
   script:
-    - poetry install --with docs --no-cache
-    - poetry run mkdocs build -d public --no-directory-urls
+    - uv sync --locked --group docs --no-cache
+    - uv run --no-sync mkdocs build -d public --no-directory-urls
   variables:
     PUBLIC_URL: "/-/orchestration-interoperability/$CI_PROJECT_NAME/-/jobs/$CI_JOB_ID/artifacts/public/"
   rules:
@@ -116,13 +119,13 @@ pages-branch:
 
 # Deploy production docs on merge to default branch
 pages:
-  extends: [.shared-setup, .poetry-setup]
+  extends: [.shared-setup, .uv-setup]
   image: python:3.11
   stage: docs
   needs: []
   script:
-    - poetry install --with docs --no-cache
-    - poetry run mkdocs build -d public --no-directory-urls
+    - uv sync --locked --group docs --no-cache
+    - uv run --no-sync mkdocs build -d public --no-directory-urls
   artifacts:
     paths:
       - public
@@ -158,9 +161,9 @@ pages:
     - apt-get update -qq && apt-get install -y -qq git
     - git config --global --add safe.directory "$CI_PROJECT_DIR"
     - pip install --quiet --upgrade pip
-    - pip install --quiet "poetry==${POETRY_PIN}" "twine==6.2.0" "check-wheel-contents==0.6.3"
+    - pip install --quiet "uv==${UV_PIN}" "twine==6.2.0" "check-wheel-contents==0.6.3"
     - python --version
-    - poetry --version
+    - uv --version
     - twine --version
     - check-wheel-contents --version
   script:
@@ -224,7 +227,7 @@ pages:
 
       rm -rf dist/
       git checkout --detach "$TAG_COMMIT"
-      poetry build
+      uv build
       twine check dist/*
       check-wheel-contents dist/*.whl
       python - "$RELEASE_TAG" <<'PY'

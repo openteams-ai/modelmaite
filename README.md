@@ -22,20 +22,20 @@ models as MAITE-compatible object-detection models.
 `modelmaite.object_detection.OnnxODModel` wraps JATIC_ONNX v1 object-detection
 models as MAITE-compatible object-detection models.
 
-Install the optional torchvision dependencies with Poetry:
+Install the optional torchvision dependencies with uv:
 
 ```bash
-poetry add "modelmaite[torchvision]"
+uv add "modelmaite[torchvision]"
 ```
 
-Install the optional VisDrone dependencies with Poetry:
+Install the optional VisDrone dependencies with uv:
 
 ```bash
-poetry add "modelmaite[visdrone]"
+uv add "modelmaite[visdrone]"
 ```
 
-Install the optional ONNX Runtime dependencies with Poetry:
+Install the optional ONNX Runtime dependencies with uv:
 
 ```bash
-poetry add "modelmaite[onnx]"
+uv add "modelmaite[onnx]"
 ```

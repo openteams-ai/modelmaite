@@ -50,8 +50,8 @@ SUPPORTED_VISDRONE_MODELS = {
     "resnet18": "ResNet18_Weights",
 }
 SUPPORTED_ONNX_MODELS = {"jatic_onnx"}
-TORCHVISION_INSTALL_HINT = 'Install TorchVision support with `poetry add "modelmaite[torchvision]"`.'
-VISDRONE_INSTALL_HINT = 'Install VisDrone support with `poetry add "modelmaite[visdrone]"`.'
+TORCHVISION_INSTALL_HINT = 'Install TorchVision support with `uv add "modelmaite[torchvision]"`.'
+VISDRONE_INSTALL_HINT = 'Install VisDrone support with `uv add "modelmaite[visdrone]"`.'
 
 
 class TorchvisionODModel:

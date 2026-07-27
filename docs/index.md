@@ -6,25 +6,25 @@
 ## Installation
 
 ```bash
-poetry add modelmaite
+uv add modelmaite
 ```
 
-Install torchvision support with Poetry:
+Install torchvision support with uv:
 
 ```bash
-poetry add "modelmaite[torchvision]"
+uv add "modelmaite[torchvision]"
 ```
 
-Install VisDrone support with Poetry:
+Install VisDrone support with uv:
 
 ```bash
-poetry add "modelmaite[visdrone]"
+uv add "modelmaite[visdrone]"
 ```
 
-Install ONNX support with Poetry:
+Install ONNX support with uv:
 
 ```bash
-poetry add "modelmaite[onnx]"
+uv add "modelmaite[onnx]"
 ```
 
 ## Usage
