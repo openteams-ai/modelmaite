@@ -45,7 +45,7 @@ stages:
 .python-matrix:
   parallel:
     matrix:
-      - VERSION: ["3.10", "3.11", "3.12"]
+      - VERSION: ["3.10", "3.11", "3.12", "3.13", "3.14"]
   image: python:$VERSION
 
 .uv-setup:
@@ -73,9 +73,14 @@ test:
     - uv run --no-sync pytest tests -vvv --cov=modelmaite --cov-report term-missing
   coverage: '/TOTAL.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
 
+# 3.11 exercises the numpy 1.x resolution fork, 3.14 the numpy 2.x fork
+# with the onnxruntime releases that first shipped cp314 wheels.
 test-onnx:
   extends: [.shared-setup, .uv-setup]
-  image: python:3.11
+  parallel:
+    matrix:
+      - VERSION: ["3.11", "3.14"]
+  image: python:$VERSION
   stage: test
   needs: []
   variables:
@@ -83,6 +88,66 @@ test-onnx:
   script:
     - uv sync --locked --group test --extra onnx
     - uv run --no-sync pytest tests/test_onnx*.py -vvv
+
+# Downstream-consumer smoke test: build the wheel and install it with pip
+# from published metadata only (no uv.lock), the way a consumer would.
+# Catches metadata-level regressions the locked jobs cannot see (e.g. a
+# dependency version that resolves but has no wheel for this CPython).
+# 3.10 and 3.14 sit on the two edges of the onnxruntime wheel split.
+test-wheel:
+  extends: [.shared-setup]
+  parallel:
+    matrix:
+      - VERSION: ["3.10", "3.14"]
+  image: python:$VERSION
+  stage: test
+  needs: []
+  variables:
+    MODELMAITE_REQUIRE_ONNX_RUNTIME: "1"
+  before_script:
+    - pip install --upgrade pip
+    - pip install "uv==${UV_PIN}"
+  script:
+    - uv build
+    - pip install "$(ls dist/*.whl)[onnx]" pytest maite
+    - pip list | grep -Ei "onnx|numpy|modelmaite"
+    - pytest tests/test_onnx*.py -vvv
+
+# Downstream-consumer resolution test: locks a consumer project spanning
+# the full supported Python range against the built wheel's published
+# metadata (the repo's own uv.lock plays no part), then installs and
+# imports on this job's interpreter. Universal resolution is metadata-
+# driven, so a published range whose best candidate cannot install on a
+# supported Python fails here instead of on a consumer's machine (e.g.
+# numpy 1.26.4 locked for 3.14, which has no cp314 wheel).
+test-uv-consumer:
+  extends: [.shared-setup]
+  parallel:
+    matrix:
+      - VERSION: ["3.10", "3.14"]
+  image: python:$VERSION
+  stage: test
+  needs: []
+  variables:
+    UV_PYTHON_DOWNLOADS: "never"
+  before_script:
+    - pip install --upgrade pip
+    - pip install "uv==${UV_PIN}"
+  script:
+    - uv build
+    - WHEEL="$(ls $PWD/dist/*.whl)"
+    - mkdir consumer-smoke && cd consumer-smoke
+    - |
+      cat > pyproject.toml <<EOF
+      [project]
+      name = "consumer-smoke"
+      version = "0.0.0"
+      requires-python = ">=3.10, <3.15"
+      dependencies = ["modelmaite[onnx] @ file://${WHEEL}"]
+      EOF
+    - uv lock
+    - uv sync --locked
+    - uv run --no-sync python -c "import modelmaite, onnx, onnxruntime, numpy; print('onnx', onnx.__version__, '| ort', onnxruntime.__version__, '| numpy', numpy.__version__)"
 
 pyright-internal:
   extends: [.shared-setup, .uv-setup]

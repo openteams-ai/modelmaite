@@ -23,30 +23,58 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
 ]
-requires-python = ">=3.10, <3.13"
+requires-python = ">=3.10, <3.15"
+# numpy floors are published per Python because resolvers like poetry do
+# not filter candidates by wheel availability: 2.1.0 ships the first
+# cp313 wheels and 2.3.2 the first cp314 wheels, so an unqualified
+# ">=1.24" lets a metadata-driven resolver lock e.g. 1.26.4 on 3.14.
 dependencies = [
-    "numpy>=1.24,<2",
+    "numpy>=1.24; python_version < '3.13'",
+    "numpy>=2.1; python_version == '3.13'",
+    "numpy>=2.3.2; python_version >= '3.14'",
     "typing-extensions>=4.5",
 ]
 
 [project.optional-dependencies]
+# onnx 1.19.0 is excluded: it uses ml_dtypes.float4_e2m1fn (added in
+# ml-dtypes 0.5) while declaring an unpinned ml_dtypes dependency, so
+# `import onnx` can crash next to ml-dtypes 0.4.x; 1.19.1 pins >=0.5.0.
+# onnx 1.22.0 is additionally excluded on CPython 3.13: it shipped no
+# cp313 wheel (1.21.0 and 1.19.1 both have one), and its sdist needs a
+# cmake/protobuf toolchain most consumer environments lack.
+#
+# onnxruntime floor 1.19: first release built against the numpy 2 ABI.
+# The python_version splits are published metadata on purpose, mirroring
+# wheel availability: 1.24+ drops CPython 3.10 wheels while still
+# declaring requires-python >=3.10, and 1.25.0 ships the first 3.14
+# wheels — a metadata-driven resolver (poetry; uv universal locks) would
+# otherwise select an uninstallable version on 3.10 or 3.14.
 onnx = [
-    "onnx>=1.14.0",
-    "onnxruntime>=1.14.0,<1.24.0",
+    "onnx>=1.14.0,!=1.19.0; python_version != '3.13'",
+    "onnx>=1.14.0,!=1.19.0,!=1.22.0; python_version == '3.13'",
+    "onnxruntime>=1.19.0,<1.24.0; python_version < '3.11'",
+    "onnxruntime>=1.19.0,<1.29.0; python_version >= '3.11' and python_version < '3.14'",
+    "onnxruntime>=1.25.0,<1.29.0; python_version >= '3.14'",
 ]
 onnx-cuda = [
-    "onnx>=1.14.0",
-    "onnxruntime-gpu>=1.14.0,<1.24.0",
+    "onnx>=1.14.0,!=1.19.0; python_version != '3.13'",
+    "onnx>=1.14.0,!=1.19.0,!=1.22.0; python_version == '3.13'",
+    "onnxruntime-gpu>=1.19.0,<1.24.0; python_version < '3.11'",
+    "onnxruntime-gpu>=1.19.0,<1.29.0; python_version >= '3.11' and python_version < '3.14'",
+    "onnxruntime-gpu>=1.25.0,<1.29.0; python_version >= '3.14'",
 ]
+# torch floor 2.4: first release built against numpy 2.
 torchvision = [
-    "torch>=2.2.0",
-    "torchvision>=0.17.0",
+    "torch>=2.4.0",
+    "torchvision>=0.19.0",
 ]
 visdrone = [
     "httpx>=0.28.1",
     "smqtk-detection>=0.22.0",
-    "torch>=2.2.0",
+    "torch>=2.4.0",
 ]
 
 [tool.hatch.build.targets.wheel]
