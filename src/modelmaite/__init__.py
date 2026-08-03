@@ -3,12 +3,17 @@
 from importlib.metadata import version
 
 from modelmaite.image_classification import OnnxICModel, TorchvisionICModel
+from modelmaite.multiobject_tracking import ByteTrackConfig, ByteTrackMOTModel, MOTFrameTarget, MOTTarget
 from modelmaite.object_detection import DetectionTarget, OnnxODModel, TorchvisionODModel, VisdroneODModel
 
 __version__ = version("modelmaite")
 
 __all__ = [
+    "ByteTrackConfig",
+    "ByteTrackMOTModel",
     "DetectionTarget",
+    "MOTFrameTarget",
+    "MOTTarget",
     "OnnxICModel",
     "OnnxODModel",
     "TorchvisionICModel",

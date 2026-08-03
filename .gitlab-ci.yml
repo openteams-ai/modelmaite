@@ -89,6 +89,21 @@ test-onnx:
     - uv sync --locked --group test --extra onnx
     - uv run --no-sync pytest tests/test_onnx*.py -vvv
 
+test-mot:
+  extends: [.shared-setup, .uv-setup]
+  parallel:
+    matrix:
+      - VERSION: ["3.10", "3.14"]
+  image: python:$VERSION
+  stage: test
+  needs: []
+  variables:
+    MODELMAITE_REQUIRE_MOT: "1"
+  script:
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends libgl1
+    - uv sync --locked --group test --extra mot --extra onnx
+    - uv run --no-sync pytest tests/test_multiobject_tracking.py -vvv
+
 # Downstream-consumer smoke test: build the wheel and install it with pip
 # from published metadata only (no uv.lock), the way a consumer would.
 # Catches metadata-level regressions the locked jobs cannot see (e.g. a
@@ -104,14 +119,16 @@ test-wheel:
   needs: []
   variables:
     MODELMAITE_REQUIRE_ONNX_RUNTIME: "1"
+    MODELMAITE_REQUIRE_MOT: "1"
   before_script:
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends libgl1
     - pip install --upgrade pip
     - pip install "uv==${UV_PIN}"
   script:
     - uv build
-    - pip install "$(ls dist/*.whl)[onnx]" pytest maite
-    - pip list | grep -Ei "onnx|numpy|modelmaite"
-    - pytest tests/test_onnx*.py -vvv
+    - pip install "$(ls dist/*.whl)[onnx,mot]" pytest "maite>=0.9.3"
+    - pip list | grep -Ei "onnx|numpy|modelmaite|supervision|trackers"
+    - pytest tests/test_onnx*.py tests/test_multiobject_tracking.py -vvv
 
 # Downstream-consumer resolution test: locks a consumer project spanning
 # the full supported Python range against the built wheel's published
@@ -131,6 +148,7 @@ test-uv-consumer:
   variables:
     UV_PYTHON_DOWNLOADS: "never"
   before_script:
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends libgl1
     - pip install --upgrade pip
     - pip install "uv==${UV_PIN}"
   script:
@@ -143,11 +161,11 @@ test-uv-consumer:
       name = "consumer-smoke"
       version = "0.0.0"
       requires-python = ">=3.10, <3.15"
-      dependencies = ["modelmaite[onnx] @ file://${WHEEL}"]
+      dependencies = ["modelmaite[onnx,mot] @ file://${WHEEL}"]
       EOF
     - uv lock
     - uv sync --locked
-    - uv run --no-sync python -c "import modelmaite, onnx, onnxruntime, numpy; print('onnx', onnx.__version__, '| ort', onnxruntime.__version__, '| numpy', numpy.__version__)"
+    - uv run --no-sync python -c "import modelmaite, numpy, onnx, onnxruntime, supervision, trackers; print('onnx', onnx.__version__, '| ort', onnxruntime.__version__, '| numpy', numpy.__version__, '| supervision', supervision.__version__)"
 
 pyright-internal:
   extends: [.shared-setup, .uv-setup]
