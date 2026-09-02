@@ -1,6 +1,7 @@
 import importlib.util
 import os
 from pathlib import Path
+from typing import Annotated, get_args, get_origin
 
 import numpy as np
 import pytest
@@ -100,6 +101,18 @@ def test_onnx_od_model_satisfies_maite_protocol():
     assert isinstance(model, od.Model)
 
 
+def _runtime_protocol(protocol):
+    """Unwrap a maite protocol that is exported as an ``Annotated`` alias.
+
+    maite 0.10 re-exports the target protocols as
+    ``Annotated[_ObjectDetectionTarget, Is[...]]`` for beartype validation, and
+    ``isinstance`` rejects a subscripted generic. 0.9.x exports the
+    runtime-checkable Protocol directly, so unwrap only when there is something
+    to unwrap.
+    """
+    return get_args(protocol)[0] if get_origin(protocol) is Annotated else protocol
+
+
 def test_detection_target_satisfies_maite_protocol():
     prediction = DetectionTarget(
         boxes=np.zeros((1, 4), dtype=np.float32),
@@ -107,7 +120,7 @@ def test_detection_target_satisfies_maite_protocol():
         scores=np.ones(1, dtype=np.float32),
     )
 
-    assert isinstance(prediction, od.ObjectDetectionTarget)
+    assert isinstance(prediction, _runtime_protocol(od.ObjectDetectionTarget))
 
 
 @pytest.mark.parametrize(

@@ -99,9 +99,12 @@ test-mot:
   needs: []
   variables:
     MODELMAITE_REQUIRE_MOT: "1"
+    MODELMAITE_REQUIRE_DATAMAITE: "1"
   script:
     - apt-get update -qq && apt-get install -y -qq --no-install-recommends libgl1
-    - uv sync --locked --group test --extra mot --extra onnx
+    # The test-mot group brings datamaite>=0.5.0 from PyPI, the first release
+    # that streams image-folder MOT sequences.
+    - uv sync --locked --group test --group test-mot --extra mot --extra onnx
     - uv run --no-sync pytest tests/test_multiobject_tracking.py -vvv
 
 # Downstream-consumer smoke test: build the wheel and install it with pip
