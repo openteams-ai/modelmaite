@@ -1413,7 +1413,7 @@ docs = [
     { name = "pymdown-extensions", specifier = ">=10.14.3" },
 ]
 test = [
-    { name = "maite", specifier = ">=0.9.3" },
+    { name = "maite", specifier = ">=0.9.5,<0.10" },
     { name = "pytest", specifier = ">=8.3.0" },
     { name = "pytest-cov", specifier = ">=4.0.0" },
     { name = "pytest-mock", specifier = ">=3.6.1" },

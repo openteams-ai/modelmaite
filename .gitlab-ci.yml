@@ -129,8 +129,13 @@ test-wheel:
     - pip install "uv==${UV_PIN}"
   script:
     - uv build
-    - pip install "$(ls dist/*.whl)[onnx,mot]" pytest "maite>=0.9.3"
-    - pip list | grep -Ei "onnx|numpy|modelmaite|supervision|trackers"
+    - pip install "$(ls dist/*.whl)[onnx,mot]"
+    # Test deps come from pyproject's test group, not a second copy pinned here,
+    # so maite has exactly one declaration in the repo. --group resolves the
+    # declared range fresh and ignores uv.lock, which is what this job wants.
+    - uv pip install --system --group test
+    # maite is in the pattern because this job resolves it unlocked.
+    - pip list | grep -Ei "onnx|numpy|maite|supervision|trackers"
     - pytest tests/test_onnx*.py tests/test_multiobject_tracking.py -vvv
 
 # Downstream-consumer resolution test: locks a consumer project spanning

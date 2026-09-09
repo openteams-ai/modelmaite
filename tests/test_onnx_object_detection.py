@@ -108,7 +108,9 @@ def _runtime_protocol(protocol):
     ``Annotated[_ObjectDetectionTarget, Is[...]]`` for beartype validation, and
     ``isinstance`` rejects a subscripted generic. 0.9.x exports the
     runtime-checkable Protocol directly, so unwrap only when there is something
-    to unwrap.
+    to unwrap. The test group is capped below 0.10 to match the rest of the
+    JATIC family; this keeps the assertion correct either way, so lifting that
+    cap needs no code change here.
     """
     return get_args(protocol)[0] if get_origin(protocol) is Annotated else protocol
 
