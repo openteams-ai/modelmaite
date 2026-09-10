@@ -1,7 +1,7 @@
 import importlib.util
 import os
 from pathlib import Path
-from typing import Annotated, get_args, get_origin
+from typing import Any, get_args, get_origin
 
 import numpy as np
 import pytest
@@ -84,6 +84,19 @@ def _fake_model(session, *, n_boxes=2, n_classes=3):
     return model
 
 
+def _runtime_checkable_protocol(alias: object) -> type[Any]:
+    # maite 0.9 exports ObjectDetectionTarget as a @runtime_checkable Protocol.
+    # maite 0.10 wraps it in Annotated[..., Is[...]] so isinstance() raises
+    # TypeError: Subscripted generics cannot be used with class and instance checks.
+    # Unwrap until we hit the inner protocol; get_origin is None on 0.9.
+    while True:
+        origin = get_origin(alias)
+        if origin is None:
+            return alias  # type: ignore[return-value]
+        args = get_args(alias)
+        alias = args[0] if args else origin
+
+
 def test_onnx_od_model_converts_jatic_outputs_to_detection_targets_without_runtime():
     model = _fake_model(_FakeOnnxSession())
 
@@ -101,20 +114,6 @@ def test_onnx_od_model_satisfies_maite_protocol():
     assert isinstance(model, od.Model)
 
 
-def _runtime_protocol(protocol):
-    """Unwrap a maite protocol that is exported as an ``Annotated`` alias.
-
-    maite 0.10 re-exports the target protocols as
-    ``Annotated[_ObjectDetectionTarget, Is[...]]`` for beartype validation, and
-    ``isinstance`` rejects a subscripted generic. 0.9.x exports the
-    runtime-checkable Protocol directly, so unwrap only when there is something
-    to unwrap. The test group is capped below 0.10 to match the rest of the
-    JATIC family; this keeps the assertion correct either way, so lifting that
-    cap needs no code change here.
-    """
-    return get_args(protocol)[0] if get_origin(protocol) is Annotated else protocol
-
-
 def test_detection_target_satisfies_maite_protocol():
     prediction = DetectionTarget(
         boxes=np.zeros((1, 4), dtype=np.float32),
@@ -122,7 +121,7 @@ def test_detection_target_satisfies_maite_protocol():
         scores=np.ones(1, dtype=np.float32),
     )
 
-    assert isinstance(prediction, _runtime_protocol(od.ObjectDetectionTarget))
+    assert isinstance(prediction, _runtime_checkable_protocol(od.ObjectDetectionTarget))
 
 
 @pytest.mark.parametrize(

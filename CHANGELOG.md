@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `maite` test dependency is now declared exactly once, as `>=0.9.5,<0.10`. The upper bound matches the range the rest of the JATIC family declares, so co-installed environments resolve without conflict; the floor is 0.9.5 rather than the family's 0.9.2 because `maite.protocols.multiobject_tracking` first ships in 0.9.4 and the MOT tests import it, and 0.9.5 is the version checkmaite pins. Everything else derives from that single declaration: `uv.lock` resolves the exact version, and the `test-wheel` job installs the `test` group with `uv pip install --group test` rather than restating the specifier, which is what previously let the locked jobs and the wheel job drift onto different maite versions. maite 0.10 exports `ObjectDetectionTarget` as `Annotated[..., Is[...]]`, which `isinstance` rejects, so the test helper unwraps the alias only when there is something to unwrap and stays correct on either side of the bound. `maite` remains test-only and absent from published metadata.
 - Project tooling migrated from Poetry to uv: hatchling build backend, PEP 735 dependency groups, and `uv.lock`; CI, publish, pre-commit, and documented install commands updated accordingly. Published dependency constraints are unchanged.
 
+### Documentation
+
+- An end-user setup page documents every optional extra (`onnx`, `onnx-cuda`, `torchvision`, `visdrone`, `mot`), including the wrappers each one enables, VisDrone weight downloads, GPU and Linux system requirements, and which extras can share an environment. `onnx-cuda` and `mot` were previously undocumented in the published docs.
+- A usage page documents how to load and call each wrapper (torchvision, VisDrone, ONNX, ByteTrack), including `load_models` for image classification and object detection. README and the docs home page point at Setup for extras and Usage for load/call.
+
 ## [0.1.0] - 2026-07-07
 
 ### Added

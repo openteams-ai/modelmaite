@@ -1,5 +1,5 @@
 site_name: modelmaite
-site_url: !ENV [MKDOCS_SITE_URL, "https://gitlab.jatic.net/jatic/orchestration-interoperability/modelmaite"]
+site_url: !ENV [MKDOCS_SITE_URL, "https://maite-models-8847e7.pages.jatic.net"]
 
 use_directory_urls: false
 
@@ -26,6 +26,8 @@ theme:
 
 nav:
   - Home: index.md
+  - Setup: setup.md
+  - Usage: usage.md
 
 markdown_extensions:
   - admonition

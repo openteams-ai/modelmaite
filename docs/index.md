@@ -9,62 +9,16 @@
 uv add modelmaite
 ```
 
-Install torchvision support with uv:
-
-```bash
-uv add "modelmaite[torchvision]"
-```
-
-Install VisDrone support with uv:
-
-```bash
-uv add "modelmaite[visdrone]"
-```
-
-Install ONNX support with uv:
-
-```bash
-uv add "modelmaite[onnx]"
-```
-
-Install multi-object-tracking support with uv:
-
-```bash
-uv add "modelmaite[mot]"
-```
-
-On Python 3.10–3.12, the `mot` and `visdrone` extras require incompatible NumPy versions
-and must be installed in separate environments. This repository also marks them as
-mutually exclusive so uv can produce its universal lockfile.
+The core install contains no model runtime; each wrapper needs an optional
+extra. See [Setup](setup.md) for the `torchvision`, `visdrone`, `onnx`,
+`onnx-cuda`, and `mot` extras, their system requirements, and which
+combinations can share an environment.
 
 ## Usage
 
-Use `modelmaite.image_classification.TorchvisionICModel` to wrap torchvision
-image-classification models as MAITE-compatible image-classification models.
-
-Use `modelmaite.image_classification.OnnxICModel` to wrap JATIC_ONNX v1
-image-classification models as MAITE-compatible image-classification models.
-
-Use `modelmaite.object_detection.TorchvisionODModel` to wrap torchvision
-object-detection models as MAITE-compatible object-detection models.
-
-Use `modelmaite.object_detection.VisdroneODModel` to wrap Kitware CenterNet
-VisDrone models as MAITE-compatible object-detection models.
-
-Use `modelmaite.object_detection.OnnxODModel` to wrap JATIC_ONNX v1
-object-detection models as MAITE-compatible object-detection models.
-
-Use `modelmaite.multiobject_tracking.ByteTrackMOTModel` to combine any
-MAITE-compatible object-detection model with ByteTrack, producing
-MAITE-compatible multi-object tracks. The detector is supplied separately, so
-the wrapper works with any of the object-detection wrappers above:
-
-```python
-from modelmaite import ByteTrackMOTModel, TorchvisionODModel
-
-detector = TorchvisionODModel(model_name="ssdlite320_mobilenet_v3_large")
-tracker = ByteTrackMOTModel(detector=detector)
-```
+See [Usage](usage.md) to load and call the torchvision, VisDrone, ONNX, and
+ByteTrack wrappers, including `load_models` for image classification and
+object detection.
 
 ## Multi-object tracking with datamaite datasets
 
