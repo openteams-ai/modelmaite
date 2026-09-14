@@ -105,10 +105,10 @@ dev = [
 test = [
     # The single maite declaration in this repo: uv.lock and the test-wheel job
     # both derive from it, so there is one version to change, not three.
-    # Capped below 0.10 to match the rest of the JATIC family (checkmaite,
+    # Capped below 0.10 to match the rest of the JATIC family (CheckMAITE,
     # checkmaite-plugins); floor is 0.9.5 because maite.protocols
     # .multiobject_tracking ships in 0.9.4+ and the MOT tests import it, and
-    # 0.9.5 is what checkmaite pins. maite is test-only and never published in
+    # 0.9.5 is what CheckMAITE pins. maite is test-only and never published in
     # modelmaite's own metadata. uv.lock pins the exact version for reproducible
     # jobs; the test helper handles 0.9 and 0.10 alike, so lifting the cap
     # needs no code change here.
