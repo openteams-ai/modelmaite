@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- CDAO funding acknowledgment (#18, DR-2.2-H-2), laid out as in CheckMAITE: an "Authors and acknowledgment" README section holds the program's standard text with the contract number, and the docs home page gains an "About the JATIC program and CDAO" section that includes it from the README through `pymdownx.snippets`.
 - A ByteTrack multi-object-tracking wrapper that composes with any MAITE-compatible object-detection model, available through the optional `mot` extra. On Python 3.10–3.12, the `mot` and `visdrone` extras require incompatible NumPy versions and must be installed separately.
 - `ByteTrackMOTModel` runs on `datamaite`'s MOTChallenge, TAO, and VisDrone-video readers through `maite.tasks.predict`, with no reader of its own; documented in the README and docs, and pinned by tests. Those datasets store each video as a folder of images, so this needs `datamaite>=0.5.0`, the first release with the image-sequence MAITE stream.
 

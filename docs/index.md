@@ -86,3 +86,21 @@ predictions against ground truth — `modelmaite` does not remap labels for you.
 **Pair VisDrone data with the torchvision or ONNX detectors, not `VisdroneODModel`.**
 The `mot` and `visdrone` extras are mutually exclusive, so ByteTrack and the VisDrone
 detector cannot share an environment.
+
+## About the JATIC program and CDAO
+
+The Joint AI Test Infrastructure Capability (JATIC) program develops software
+products for AI Test & Evaluation (T&E) and AI Assurance. The program is managed
+by the Assessment & Assurance Division of the
+DoD Chief Digital and Artificial Intelligence Office (CDAO).
+It is funded from FY23-FY29.
+
+!!! type "Program Mission"
+
+    Develop software to accelerate and enable AI model test and evaluation for testers across the Department of Defense (DoD) enterprise, including DoD programs, research laboratories, industry partners, and academia in order to provide insight on the performance, effectiveness, robustness, and safety of the DoD's AI-enabled systems.
+
+Learn more in the [CDAO JATIC program documentation](https://cdao.pages.jatic.net/public/).
+
+### CDAO Funding Acknowledgment
+
+--8<-- "README.md:acknowledgment"

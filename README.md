@@ -116,3 +116,20 @@ predictions against ground truth — `modelmaite` does not remap labels for you.
 **Pair VisDrone data with the torchvision or ONNX detectors, not `VisdroneODModel`.**
 The `mot` and `visdrone` extras are mutually exclusive (see above), so ByteTrack and the
 VisDrone detector cannot share an environment.
+
+## Authors and acknowledgment
+
+This project was created for [CDAO JATIC](https://cdao.pages.jatic.net/public/)
+and is maintained by OpenTeams with collaborative community support.
+
+### CDAO Funding Acknowledgment
+
+<!-- --8<-- [start:acknowledgment] -->
+
+This material is based upon work supported by the Chief Digital and Artificial
+Intelligence Office under Contract No. W519TC-25-9-2041. The views and
+conclusions contained herein are those of the author(s) and should not be
+interpreted as necessarily representing the official policies or endorsements,
+either expressed or implied, of the U.S. Government.
+
+<!-- --8<-- [end:acknowledgment] -->
