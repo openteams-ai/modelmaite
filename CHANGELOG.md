@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-07
+
 ### Added
 
 - CDAO funding acknowledgment (#18, DR-2.2-H-2), laid out as in CheckMAITE: an "Authors and acknowledgment" README section holds the program's standard text with the contract number, and the docs home page gains an "About the JATIC program and CDAO" section that includes it from the README through `pymdownx.snippets`.

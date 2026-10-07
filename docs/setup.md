@@ -20,14 +20,6 @@ uv add modelmaite
 pip install modelmaite
 ```
 
-!!! note "Published release vs. this branch"
-
-    This page documents the current source tree. Version 0.1.0 on PyPI supports
-    Python 3.10–3.12, requires NumPy `<2`, and offers only the `onnx`,
-    `onnx-cuda`, `torchvision`, and `visdrone` extras. The source tree also
-    includes the `mot` extra, Python 3.13 and 3.14 support, and uncapped NumPy
-    floors.
-
 ## Choose extras
 
 ### `torchvision`
