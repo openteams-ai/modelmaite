@@ -252,7 +252,7 @@ pages:
     - apt-get update -qq && apt-get install -y -qq git
     - git config --global --add safe.directory "$CI_PROJECT_DIR"
     - pip install --quiet --upgrade pip
-    - pip install --quiet "uv==${UV_PIN}" "twine==6.2.0" "check-wheel-contents==0.6.3"
+    - pip install --quiet "uv==${UV_PIN}" "twine==7.0.0" "check-wheel-contents==0.6.3"
     - python --version
     - uv --version
     - twine --version
