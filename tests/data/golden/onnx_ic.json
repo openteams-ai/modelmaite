@@ -1,0 +1,61 @@
+{
+ "model": {
+  "metadata": {
+   "id": "jatic_onnx_1f11f2da",
+   "index2label": {
+    "0": "background",
+    "1": "cat",
+    "2": "dog"
+   }
+  },
+  "name": "jatic_onnx"
+ },
+ "outputs.float_rgb": [
+  {
+   "data": [0.3333373, 0.2224467, 0.444216],
+   "dtype": "float32",
+   "shape": [3]
+  },
+  {
+   "data": [0.3309546, 0.3058102, 0.3632353],
+   "dtype": "float32",
+   "shape": [3]
+  }
+ ],
+ "outputs.uint8_gray": [
+  {
+   "data": [0.219624, 0.3922736, 0.3881023],
+   "dtype": "float32",
+   "shape": [3]
+  },
+  {
+   "data": [0.2023004, 0.3054603, 0.4922393],
+   "dtype": "float32",
+   "shape": [3]
+  }
+ ],
+ "outputs.uint8_rgb": [
+  {
+   "data": [0.3198402, 0.2411324, 0.4390273],
+   "dtype": "float32",
+   "shape": [3]
+  },
+  {
+   "data": [0.3578606, 0.273596, 0.3685433],
+   "dtype": "float32",
+   "shape": [3]
+  }
+ ],
+ "outputs.uint8_rgba": [
+  {
+   "data": [0.3382505, 0.255631, 0.4061184],
+   "dtype": "float32",
+   "shape": [3]
+  },
+  {
+   "data": [0.3108956, 0.3797063, 0.3093982],
+   "dtype": "float32",
+   "shape": [3]
+  }
+ ]
+}

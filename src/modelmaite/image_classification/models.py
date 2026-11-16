@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Literal, TypeAlias, TypedDict, cast
 
 import numpy as np
-from numpy.typing import ArrayLike, NDArray
+from numpy.typing import NDArray
 from typing_extensions import NotRequired  # noqa: UP035
 
 from modelmaite._onnx import (
@@ -26,6 +26,7 @@ from modelmaite._onnx import (
     validate_input_batch,
     validate_jatic_onnx_session,
 )
+from modelmaite._typing import Image, ModelMetadata
 
 SUPPORTED_TORCHVISION_MODELS = {
     "alexnet": "AlexNet_Weights",
@@ -107,10 +108,10 @@ class TorchvisionICModel:
 
         if model_id is None:
             model_id = f"{self._model_name}_{id_hash(weights_path=weights_path, config_path=config_path)}"
-        self.metadata = {"id": model_id, "index2label": self.index2label}
+        self.metadata: ModelMetadata = {"id": model_id, "index2label": self.index2label}
         self.model.eval()
 
-    def __call__(self, input_batch: Sequence[ArrayLike]) -> Sequence[NDArray[np.float32]]:
+    def __call__(self, input_batch: Sequence[Image]) -> Sequence[NDArray[np.float32]]:
         """Make image-classification predictions for a CHW image batch.
 
         Inputs should be ``uint8`` CHW images or floating-point CHW images already scaled to ``[0, 1]``.
@@ -206,9 +207,9 @@ class OnnxICModel:
         self._image_width = image_width
         if model_id is None:
             model_id = f"{self._model_name}_{id_hash(weights_path=weights_path, config_path=config_path)}"
-        self.metadata = {"id": model_id, "index2label": self.index2label}
+        self.metadata: ModelMetadata = {"id": model_id, "index2label": self.index2label}
 
-    def __call__(self, input_batch: Sequence[ArrayLike]) -> Sequence[NDArray[np.float32]]:
+    def __call__(self, input_batch: Sequence[Image]) -> Sequence[NDArray[np.float32]]:
         """Make image-classification predictions for a CHW image batch."""
         batch, _ = prepare_jatic_onnx_image_batch(
             input_batch,
@@ -315,7 +316,7 @@ def _set_torch_device(torch: Any, device: object | None) -> Any:
     return torch.device(device)
 
 
-def _to_torch_batch(torch: Any, input_batch: Sequence[ArrayLike]) -> Any:
+def _to_torch_batch(torch: Any, input_batch: Sequence[Image]) -> Any:
     validate_input_batch(input_batch)
     return torch.stack([torch.as_tensor(obj) for obj in input_batch])
 

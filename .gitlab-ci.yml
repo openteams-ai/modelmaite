@@ -114,6 +114,27 @@ test-mot:
     - uv sync --locked --group test --group test-mot --extra mot --extra onnx
     - uv run --no-sync pytest tests/test_multiobject_tracking.py -vvv
 
+# Golden-output tests with every backend that needs no download: ONNX, MOT and
+# real torchvision on CPU. torch and torchvision are installed at the versions
+# uv.lock pins, but from the PyTorch CPU index: the PyPI Linux wheels pull in
+# several GB of CUDA libraries.
+test-golden:
+  extends: [.shared-setup, .uv-setup]
+  image: python:3.12
+  stage: test
+  needs: []
+  variables:
+    MODELMAITE_REQUIRE_ONNX_RUNTIME: "1"
+    MODELMAITE_REQUIRE_MOT: "1"
+    MODELMAITE_REQUIRE_TORCHVISION: "1"
+  script:
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends libgl1
+    - uv sync --locked --group test --extra onnx --extra mot
+    - uv export --locked --extra torchvision --no-hashes --no-header --no-annotate | grep -E '^torch(vision)?==' > /tmp/torch-requirements.txt
+    - cat /tmp/torch-requirements.txt
+    - uv pip install --index https://download.pytorch.org/whl/cpu -r /tmp/torch-requirements.txt
+    - uv run --no-sync pytest tests/test_golden_outputs.py tests/test_torchvision*.py -vvv
+
 # Downstream-consumer smoke test: build the wheel and install it with pip
 # from published metadata only (no uv.lock), the way a consumer would.
 # Catches metadata-level regressions the locked jobs cannot see (e.g. a
@@ -188,8 +209,12 @@ pyright-internal:
   stage: pyright
   needs: []
   script:
-    - uv sync --locked
-    - uv run --no-sync pyright src/
+    # The test group brings maite for the conformance checks in tests/typing.
+    - uv sync --locked --group test
+    # Checks the paths in [tool.pyright] include: src/ and tests/typing/.
+    - uv run --no-sync pyright
+    # Type-checks every advertised wrapper against its MAITE protocol.
+    - uv run --no-sync python scripts/statically_verify_maite_entrypoints.py
 
 # Deploy docs preview on merge requests
 pages-branch:

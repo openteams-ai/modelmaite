@@ -1,0 +1,10 @@
+{
+ "ids": {
+  "ByteTrackMOTModel()": "bytetrack_colour-box-detector",
+  "ByteTrackMOTModel(model_id='')": "colour-box-detector",
+  "ByteTrackMOTModel(model_id='custom')": "custom",
+  "TorchvisionICModel(alexnet)": "alexnet_a67c1457",
+  "TorchvisionODModel(ssd300_vgg16)": "ssd300_vgg16_a67c1457",
+  "VisdroneODModel(resnet18)": "visdrone_resnet18_kitware"
+ }
+}

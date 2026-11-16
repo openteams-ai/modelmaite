@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any, Literal, TypeAlias, TypedDict, cast
 
 import numpy as np
-from numpy.typing import ArrayLike
 from typing_extensions import NotRequired  # noqa: UP035
 
 from modelmaite._onnx import (
@@ -28,6 +27,7 @@ from modelmaite._onnx import (
     validate_input_batch,
     validate_jatic_onnx_session,
 )
+from modelmaite._typing import Image, ModelMetadata
 from modelmaite.object_detection.types import DetectionTarget
 
 SUPPORTED_TORCHVISION_MODELS = {
@@ -131,10 +131,10 @@ class TorchvisionODModel:
 
         if model_id is None:
             model_id = f"{self._model_name}_{id_hash(weights_path=weights_path, config_path=config_path)}"
-        self.metadata = {"id": model_id, "index2label": self.index2label}
+        self.metadata: ModelMetadata = {"id": model_id, "index2label": self.index2label}
         self.model.eval()
 
-    def __call__(self, input_batch: Sequence[ArrayLike]) -> Sequence[DetectionTarget]:
+    def __call__(self, input_batch: Sequence[Image]) -> Sequence[DetectionTarget]:
         """Make object-detection predictions for a CHW image batch.
 
         Inputs should be 3-channel RGB ``uint8`` CHW images or floating-point CHW images already scaled to ``[0, 1]``.
@@ -274,9 +274,9 @@ class VisdroneODModel:
         _validate_smqtk_labels(self.model, set(self.index2label.values()))
         if model_id is None:
             model_id = f"visdrone_{arch}_kitware"
-        self.metadata = {"id": model_id, "index2label": self.index2label}
+        self.metadata: ModelMetadata = {"id": model_id, "index2label": self.index2label}
 
-    def __call__(self, input_batch: Sequence[ArrayLike]) -> Sequence[DetectionTarget]:
+    def __call__(self, input_batch: Sequence[Image]) -> Sequence[DetectionTarget]:
         """Make object-detection predictions for a CHW image batch."""
         validate_input_batch(input_batch)
         array_batch = [np.asarray(inp).transpose(1, 2, 0) for inp in input_batch]
@@ -386,9 +386,9 @@ class OnnxODModel:
         self._n_boxes = optional_output_int(output_meta.get("nBoxes"), "nBoxes", minimum=0)
         if model_id is None:
             model_id = f"{self._model_name}_{id_hash(weights_path=weights_path, config_path=config_path)}"
-        self.metadata = {"id": model_id, "index2label": self.index2label}
+        self.metadata: ModelMetadata = {"id": model_id, "index2label": self.index2label}
 
-    def __call__(self, input_batch: Sequence[ArrayLike]) -> Sequence[DetectionTarget]:
+    def __call__(self, input_batch: Sequence[Image]) -> Sequence[DetectionTarget]:
         """Make object-detection predictions for a CHW image batch.
 
         Every JATIC_ONNX output slot is returned after coordinate scaling; this wrapper does not apply NMS,
@@ -545,7 +545,7 @@ def _set_torch_device(torch: Any, device: object | None) -> Any:
     return torch.device(device)
 
 
-def _to_torch_images(torch: Any, input_batch: Sequence[ArrayLike]) -> list[Any]:
+def _to_torch_images(torch: Any, input_batch: Sequence[Image]) -> list[Any]:
     if len(input_batch) == 0:
         raise ValueError("Input batch must contain at least one image.")
 

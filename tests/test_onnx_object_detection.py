@@ -6,6 +6,7 @@ from typing import Any, get_args, get_origin
 import numpy as np
 import pytest
 from maite.protocols import object_detection as od
+from maite.spotcheck import SpotcheckError, spotcheck_component
 
 from modelmaite.object_detection import DetectionTarget, OnnxODModel, load_models
 
@@ -114,6 +115,16 @@ def test_onnx_od_model_satisfies_maite_protocol():
     assert isinstance(model, od.Model)
 
 
+def test_onnx_od_model_passes_maite_spotcheck():
+    model = spotcheck_component(od.Model)(_fake_model(_FakeOnnxSession()))
+
+    (prediction,) = model([np.zeros((3, 10, 20), dtype=np.uint8)])
+
+    np.testing.assert_array_equal(prediction.labels, np.array([1, 2]))
+    with pytest.raises(SpotcheckError):
+        model([np.zeros((10, 20), dtype=np.uint8)])
+
+
 def test_detection_target_satisfies_maite_protocol():
     prediction = DetectionTarget(
         boxes=np.zeros((1, 4), dtype=np.float32),
@@ -122,6 +133,32 @@ def test_detection_target_satisfies_maite_protocol():
     )
 
     assert isinstance(prediction, _runtime_checkable_protocol(od.ObjectDetectionTarget))
+
+
+class _PerClassScoresModel:
+    metadata = {"id": "per-class-scores"}
+
+    def __init__(self, row):
+        self.row = row
+
+    def __call__(self, input_batch):
+        return [
+            DetectionTarget(
+                boxes=np.zeros((1, 4), dtype=np.float32),
+                labels=np.zeros(1, dtype=np.int64),
+                scores=np.array([self.row], dtype=np.float32),
+            )
+            for _ in input_batch
+        ]
+
+
+def test_detection_target_per_class_scores_must_sum_to_at_most_one():
+    # MAITE 0.10 checks that each row of (n_boxes, n_classes) scores sums to at most 1.
+    image = np.zeros((3, 4, 4), dtype=np.uint8)
+
+    spotcheck_component(od.Model)(_PerClassScoresModel([0.3, 0.6]))([image])
+    with pytest.raises(SpotcheckError):
+        spotcheck_component(od.Model)(_PerClassScoresModel([0.7, 0.6]))([image])
 
 
 @pytest.mark.parametrize(

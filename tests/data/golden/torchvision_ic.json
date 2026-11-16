@@ -1,0 +1,37 @@
+{
+ "model": {
+  "metadata": {
+   "id": "alexnet_e3931a77",
+   "index2label": {
+    "0": "background",
+    "1": "cat",
+    "2": "dog"
+   }
+  },
+  "name": "alexnet"
+ },
+ "outputs.float_rgb": [
+  {
+   "data": [0.2676028, 0.4167203, 0.3156768],
+   "dtype": "float32",
+   "shape": [3]
+  },
+  {
+   "data": [0.2670142, 0.4208011, 0.3121847],
+   "dtype": "float32",
+   "shape": [3]
+  }
+ ],
+ "outputs.uint8_rgb": [
+  {
+   "data": [0.2657632, 0.4218667, 0.3123701],
+   "dtype": "float32",
+   "shape": [3]
+  },
+  {
+   "data": [0.2663017, 0.4175133, 0.3161851],
+   "dtype": "float32",
+   "shape": [3]
+  }
+ ]
+}

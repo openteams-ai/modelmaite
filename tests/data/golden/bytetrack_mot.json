@@ -1,0 +1,264 @@
+{
+ "model": {
+  "metadata": {
+   "id": "bytetrack_colour-box-detector",
+   "index2label": {
+    "0": "background",
+    "1": "red",
+    "2": "green"
+   }
+  }
+ },
+ "outputs.two_streams": [
+  {
+   "frame_tracks": [
+    {
+     "boxes": {
+      "data": [2.0, 5.0, 12.0, 15.0, 30.0, 10.0, 40.0, 22.0],
+      "dtype": "float32",
+      "shape": [2, 4]
+     },
+     "labels": {
+      "data": [1, 2],
+      "dtype": "int64",
+      "shape": [2]
+     },
+     "scores": {
+      "data": [0.9411765, 0.7843137],
+      "dtype": "float32",
+      "shape": [2]
+     },
+     "track_ids": {
+      "data": [-1, -1],
+      "dtype": "int64",
+      "shape": [2]
+     }
+    },
+    {
+     "boxes": {
+      "data": [5.0, 5.0, 15.0, 15.0, 30.0, 12.0, 40.0, 24.0],
+      "dtype": "float32",
+      "shape": [2, 4]
+     },
+     "labels": {
+      "data": [1, 2],
+      "dtype": "int64",
+      "shape": [2]
+     },
+     "scores": {
+      "data": [0.9411765, 0.7843137],
+      "dtype": "float32",
+      "shape": [2]
+     },
+     "track_ids": {
+      "data": [0, 1],
+      "dtype": "int64",
+      "shape": [2]
+     }
+    },
+    {
+     "boxes": {
+      "data": [8.0, 5.0, 18.0, 15.0, 30.0, 14.0, 40.0, 26.0],
+      "dtype": "float32",
+      "shape": [2, 4]
+     },
+     "labels": {
+      "data": [1, 2],
+      "dtype": "int64",
+      "shape": [2]
+     },
+     "scores": {
+      "data": [0.9411765, 0.7843137],
+      "dtype": "float32",
+      "shape": [2]
+     },
+     "track_ids": {
+      "data": [0, 1],
+      "dtype": "int64",
+      "shape": [2]
+     }
+    },
+    {
+     "boxes": {
+      "data": [11.0, 5.0, 21.0, 15.0],
+      "dtype": "float32",
+      "shape": [1, 4]
+     },
+     "labels": {
+      "data": [1],
+      "dtype": "int64",
+      "shape": [1]
+     },
+     "scores": {
+      "data": [0.9411765],
+      "dtype": "float32",
+      "shape": [1]
+     },
+     "track_ids": {
+      "data": [0],
+      "dtype": "int64",
+      "shape": [1]
+     }
+    },
+    {
+     "boxes": {
+      "data": [14.0, 5.0, 24.0, 15.0, 30.0, 18.0, 40.0, 30.0],
+      "dtype": "float32",
+      "shape": [2, 4]
+     },
+     "labels": {
+      "data": [1, 2],
+      "dtype": "int64",
+      "shape": [2]
+     },
+     "scores": {
+      "data": [0.9411765, 0.7843137],
+      "dtype": "float32",
+      "shape": [2]
+     },
+     "track_ids": {
+      "data": [0, 1],
+      "dtype": "int64",
+      "shape": [2]
+     }
+    },
+    {
+     "boxes": {
+      "data": [17.0, 5.0, 27.0, 15.0, 30.0, 20.0, 40.0, 32.0],
+      "dtype": "float32",
+      "shape": [2, 4]
+     },
+     "labels": {
+      "data": [1, 2],
+      "dtype": "int64",
+      "shape": [2]
+     },
+     "scores": {
+      "data": [0.9411765, 0.7843137],
+      "dtype": "float32",
+      "shape": [2]
+     },
+     "track_ids": {
+      "data": [0, 1],
+      "dtype": "int64",
+      "shape": [2]
+     }
+    }
+   ]
+  },
+  {
+   "frame_tracks": [
+    {
+     "boxes": {
+      "data": [14.0, 5.0, 24.0, 15.0, 30.0, 18.0, 40.0, 30.0],
+      "dtype": "float32",
+      "shape": [2, 4]
+     },
+     "labels": {
+      "data": [1, 2],
+      "dtype": "int64",
+      "shape": [2]
+     },
+     "scores": {
+      "data": [0.9411765, 0.7843137],
+      "dtype": "float32",
+      "shape": [2]
+     },
+     "track_ids": {
+      "data": [-1, -1],
+      "dtype": "int64",
+      "shape": [2]
+     }
+    },
+    {
+     "boxes": {
+      "data": [11.0, 5.0, 21.0, 15.0, 30.0, 16.0, 40.0, 28.0],
+      "dtype": "float32",
+      "shape": [2, 4]
+     },
+     "labels": {
+      "data": [1, 2],
+      "dtype": "int64",
+      "shape": [2]
+     },
+     "scores": {
+      "data": [0.9411765, 0.7843137],
+      "dtype": "float32",
+      "shape": [2]
+     },
+     "track_ids": {
+      "data": [0, 1],
+      "dtype": "int64",
+      "shape": [2]
+     }
+    },
+    {
+     "boxes": {
+      "data": [8.0, 5.0, 18.0, 15.0, 30.0, 14.0, 40.0, 26.0],
+      "dtype": "float32",
+      "shape": [2, 4]
+     },
+     "labels": {
+      "data": [1, 2],
+      "dtype": "int64",
+      "shape": [2]
+     },
+     "scores": {
+      "data": [0.9411765, 0.7843137],
+      "dtype": "float32",
+      "shape": [2]
+     },
+     "track_ids": {
+      "data": [0, 1],
+      "dtype": "int64",
+      "shape": [2]
+     }
+    },
+    {
+     "boxes": {
+      "data": [5.0, 5.0, 15.0, 15.0, 30.0, 12.0, 40.0, 24.0],
+      "dtype": "float32",
+      "shape": [2, 4]
+     },
+     "labels": {
+      "data": [1, 2],
+      "dtype": "int64",
+      "shape": [2]
+     },
+     "scores": {
+      "data": [0.9411765, 0.7843137],
+      "dtype": "float32",
+      "shape": [2]
+     },
+     "track_ids": {
+      "data": [0, 1],
+      "dtype": "int64",
+      "shape": [2]
+     }
+    },
+    {
+     "boxes": {
+      "data": [2.0, 5.0, 12.0, 15.0, 30.0, 10.0, 40.0, 22.0],
+      "dtype": "float32",
+      "shape": [2, 4]
+     },
+     "labels": {
+      "data": [1, 2],
+      "dtype": "int64",
+      "shape": [2]
+     },
+     "scores": {
+      "data": [0.9411765, 0.7843137],
+      "dtype": "float32",
+      "shape": [2]
+     },
+     "track_ids": {
+      "data": [0, 1],
+      "dtype": "int64",
+      "shape": [2]
+     }
+    }
+   ]
+  }
+ ]
+}

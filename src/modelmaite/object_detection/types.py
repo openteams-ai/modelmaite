@@ -18,7 +18,8 @@ class DetectionTarget:
     labels
         Integer labels for the detected objects with shape ``(n_boxes,)``.
     scores
-        Detection confidence scores with shape ``(n_boxes,)`` or ``(n_boxes, n_classes)``.
+        Detection confidence scores with shape ``(n_boxes,)`` or ``(n_boxes, n_classes)``. MAITE 0.10 requires
+        each score to be at most 1, and each row of ``(n_boxes, n_classes)`` scores to sum to at most 1.
     """
 
     boxes: ArrayLike

@@ -6,6 +6,8 @@ import types
 
 import numpy as np
 import pytest
+from maite.protocols import object_detection as od
+from maite.spotcheck import SpotcheckError, spotcheck_component
 
 from modelmaite.object_detection import DetectionTarget, VisdroneODModel
 from modelmaite.object_detection.models import load_models
@@ -169,6 +171,30 @@ def test_visdrone_valid_model_initialization(fake_model_location, monkeypatch):
     assert model.metadata["id"] == "visdrone_resnet18_kitware"
     assert model.metadata["index2label"][4] == "car"
     assert _FakeCenterNetVisdrone.instances[-1].kwargs["model_file"] == str(dir_ / f"{fname}.pth")
+
+
+def test_visdrone_model_satisfies_maite_protocol(fake_model_location, monkeypatch):
+    _install_fake_torch(monkeypatch)
+    _install_fake_smqtk(monkeypatch)
+    dir_, fname = fake_model_location
+    model = VisdroneODModel(arch="resnet18", device="cpu", model_pickle_dir=dir_, model_name=fname)
+
+    assert isinstance(model, od.Model)
+
+
+def test_visdrone_model_passes_maite_spotcheck(fake_model_location, monkeypatch):
+    _install_fake_torch(monkeypatch)
+    _install_fake_smqtk(monkeypatch)
+    dir_, fname = fake_model_location
+    model = spotcheck_component(od.Model)(
+        VisdroneODModel(arch="resnet18", device="cpu", model_pickle_dir=dir_, model_name=fname)
+    )
+
+    predictions = model([np.zeros((3, 5, 7), dtype=np.uint8), np.ones((3, 5, 7), dtype=np.uint8)])
+
+    assert len(predictions) == 2
+    with pytest.raises(SpotcheckError):
+        model([np.zeros((5, 7), dtype=np.uint8)])
 
 
 def test_visdrone_rejects_unknown_smqtk_label_metadata(fake_model_location, monkeypatch):

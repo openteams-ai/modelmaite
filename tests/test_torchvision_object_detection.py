@@ -7,6 +7,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from maite.protocols import object_detection as od
+from maite.spotcheck import SpotcheckError, spotcheck_component
 
 from modelmaite.object_detection import DetectionTarget, TorchvisionODModel
 from modelmaite.object_detection.models import load_models
@@ -146,6 +148,24 @@ def test_torchvision_od_model_returns_detection_targets(monkeypatch):
     np.testing.assert_allclose(predictions[0].boxes, np.array([[0.0, 1.0, 2.0, 3.0]], dtype=np.float32))
     np.testing.assert_array_equal(predictions[0].labels, np.array([1]))
     np.testing.assert_allclose(predictions[0].scores, np.array([0.9], dtype=np.float32))
+
+
+def test_torchvision_od_model_satisfies_maite_protocol(monkeypatch):
+    _install_fake_torchvision(monkeypatch)
+    model = TorchvisionODModel(model_name="ssd300_vgg16", device="cpu")
+
+    assert isinstance(model, od.Model)
+
+
+def test_torchvision_od_model_passes_maite_spotcheck(monkeypatch):
+    _install_fake_torchvision(monkeypatch)
+    model = spotcheck_component(od.Model)(TorchvisionODModel(model_name="ssd300_vgg16", device="cpu"))
+
+    predictions = model([np.zeros((3, 4, 5), dtype=np.uint8), np.ones((3, 6, 7), dtype=np.uint8)])
+
+    assert len(predictions) == 2
+    with pytest.raises(SpotcheckError):
+        model([np.zeros((4, 5), dtype=np.uint8)])
 
 
 def test_torchvision_od_model_loads_user_weights(monkeypatch, tmp_path: Path):

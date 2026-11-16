@@ -6,6 +6,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from maite.protocols import image_classification as ic
+from maite.spotcheck import SpotcheckError, spotcheck_component
 
 from modelmaite.image_classification import TorchvisionICModel
 from modelmaite.image_classification.models import load_models
@@ -139,6 +141,24 @@ def test_torchvision_ic_model_returns_softmax_scores(monkeypatch):
     assert predictions[0].dtype == np.float32
     np.testing.assert_allclose(predictions[0].sum(), 1.0)
     np.testing.assert_allclose(predictions[1].sum(), 1.0)
+
+
+def test_torchvision_ic_model_satisfies_maite_protocol(monkeypatch):
+    _install_fake_torchvision(monkeypatch)
+    model = TorchvisionICModel(model_name="alexnet", device="cpu")
+
+    assert isinstance(model, ic.Model)
+
+
+def test_torchvision_ic_model_passes_maite_spotcheck(monkeypatch):
+    _install_fake_torchvision(monkeypatch)
+    model = spotcheck_component(ic.Model)(TorchvisionICModel(model_name="alexnet", device="cpu"))
+
+    predictions = model([np.zeros((3, 4, 5), dtype=np.uint8), np.ones((3, 4, 5), dtype=np.uint8)])
+
+    assert len(predictions) == 2
+    with pytest.raises(SpotcheckError):
+        model([np.zeros((4, 5), dtype=np.uint8)])
 
 
 def test_torchvision_ic_model_loads_user_weights(monkeypatch, tmp_path: Path):

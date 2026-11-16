@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from maite.protocols import multiobject_tracking as mot
+from maite.spotcheck import SpotcheckError, spotcheck_component
 from maite.tasks import predict
 
 import modelmaite.multiobject_tracking.models as mot_models
@@ -45,8 +46,8 @@ requires_datamaite = pytest.mark.skipif(
 @dataclass
 class _VideoFrame:
     pixels: np.ndarray
-    time_s: float
-    pts: int
+    time_s: float | None
+    pts: int | None
     frame_index: int
 
 
@@ -120,6 +121,22 @@ def test_bytetrack_mot_model_tracks_any_maite_detector_and_resets_per_video():
     np.testing.assert_array_equal(second.frame_tracks[0].track_ids, np.array([-1]))
     np.testing.assert_array_equal(second.frame_tracks[1].track_ids, np.array([0]))
     np.testing.assert_allclose(first.frame_tracks[0].scores, np.array([0.9], dtype=np.float32))
+
+
+@requires_mot_runtime
+def test_bytetrack_mot_model_passes_maite_spotcheck():
+    model = spotcheck_component(mot.Model)(ByteTrackMOTModel(detector=_MovingDetector()))
+    # MAITE 0.10 allows frames without timestamps.
+    frames = [
+        _VideoFrame(pixels=np.zeros((3, 10, 20), dtype=np.uint8), time_s=None, pts=None, frame_index=index)
+        for index in range(3)
+    ]
+
+    (prediction,) = model([frames])
+
+    assert len(prediction.frame_tracks) == 3
+    with pytest.raises(SpotcheckError):
+        model([[np.zeros((3, 10, 20), dtype=np.uint8)]])
 
 
 def test_bytetrack_mot_model_rejects_invalid_detector_batch_size():

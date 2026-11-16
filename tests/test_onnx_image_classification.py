@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from maite.protocols import image_classification as ic
+from maite.spotcheck import SpotcheckError, spotcheck_component
 
 from modelmaite.image_classification import OnnxICModel, load_models
 
@@ -139,6 +140,16 @@ def test_onnx_ic_model_satisfies_maite_protocol():
     model = _fake_model(_FakeOnnxSession())
 
     assert isinstance(model, ic.Model)
+
+
+def test_onnx_ic_model_passes_maite_spotcheck():
+    model = spotcheck_component(ic.Model)(_fake_model(_FakeOnnxSession()))
+
+    predictions = model([np.zeros((3, 4, 5), dtype=np.uint8), np.ones((3, 4, 5), dtype=np.uint8)])
+
+    assert len(predictions) == 2
+    with pytest.raises(SpotcheckError):
+        model([np.zeros((4, 5), dtype=np.uint8)])
 
 
 @pytest.mark.parametrize(

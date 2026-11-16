@@ -10,7 +10,8 @@ you intend to use.
 - The core install brings only `numpy` and `typing-extensions`. It contains no
   model runtime, so every wrapper needs an extra.
 - `maite` is not a runtime dependency. Install it yourself if you want the
-  MAITE protocol types in your own code.
+  MAITE protocol types in your own code. The wrappers are tested against
+  MAITE `>=0.10.3,<0.11`.
 
 ```bash
 uv add modelmaite

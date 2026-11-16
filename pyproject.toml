@@ -35,7 +35,8 @@ dependencies = [
     "numpy>=1.24; python_version < '3.13'",
     "numpy>=2.1; python_version == '3.13'",
     "numpy>=2.3.2; python_version >= '3.14'",
-    "typing-extensions>=4.5",
+    # 4.9 adds ReadOnly, which the ModelMetadata type uses.
+    "typing-extensions>=4.9",
 ]
 
 [project.optional-dependencies]
@@ -81,6 +82,22 @@ visdrone = [
     "torch>=2.4.0",
 ]
 
+# Every exported model is advertised under the MAITE protocol it implements.
+# scripts/statically_verify_maite_entrypoints.py type-checks each one against
+# that protocol in CI, and tests/test_maite_entry_points.py checks that no
+# exported model is missing here.
+[project.entry-points."maite.protocols.image_classification.Model"]
+modelmaite_OnnxICModel = "modelmaite.image_classification:OnnxICModel"
+modelmaite_TorchvisionICModel = "modelmaite.image_classification:TorchvisionICModel"
+
+[project.entry-points."maite.protocols.object_detection.Model"]
+modelmaite_OnnxODModel = "modelmaite.object_detection:OnnxODModel"
+modelmaite_TorchvisionODModel = "modelmaite.object_detection:TorchvisionODModel"
+modelmaite_VisdroneODModel = "modelmaite.object_detection:VisdroneODModel"
+
+[project.entry-points."maite.protocols.multiobject_tracking.Model"]
+modelmaite_ByteTrackMOTModel = "modelmaite.multiobject_tracking:ByteTrackMOTModel"
+
 [tool.uv]
 # Lockfile-only uv configuration; this is not published in wheel metadata and
 # is ignored by Poetry, pip, and conda. Roboflow trackers requires NumPy 2,
@@ -105,14 +122,16 @@ dev = [
 test = [
     # The single maite declaration in this repo: uv.lock and the test-wheel job
     # both derive from it, so there is one version to change, not three.
-    # Capped below 0.10 to match the rest of the JATIC family (CheckMAITE,
-    # checkmaite-plugins); floor is 0.9.5 because maite.protocols
-    # .multiobject_tracking ships in 0.9.4+ and the MOT tests import it, and
-    # 0.9.5 is what CheckMAITE pins. maite is test-only and never published in
-    # modelmaite's own metadata. uv.lock pins the exact version for reproducible
-    # jobs; the test helper handles 0.9 and 0.10 alike, so lifting the cap
-    # needs no code change here.
-    "maite>=0.9.5,<0.10",
+    # Floor 0.10.3 and cap below 0.11 match CheckMAITE (maite <0.11). The
+    # experimental extra brings beartype, which maite.spotcheck needs; the
+    # conformance tests use spotcheck. maite is test-only and never published
+    # in modelmaite's own metadata. uv.lock pins the exact version for
+    # reproducible jobs.
+    "maite[experimental]>=0.10.3,<0.11",
+    # maite 0.10 imports typing_extensions.TypeForm (added in 4.13) but declares
+    # typing-extensions>=4.5, so an unlocked resolve (test-wheel) could pair it
+    # with a version it cannot import.
+    "typing-extensions>=4.13",
     "pytest>=8.3.0",
     "pytest-cov>=4.0.0",
     "pytest-mock>=3.6.1",
@@ -138,8 +157,10 @@ exclude_dirs = ["tests"]
 [tool.pyright]
 reportMissingImports = "warning"
 reportUnnecessaryTypeIgnoreComment = "error"
-include = ["src"]
-exclude = ["tests"]
+# tests/typing holds static checks that ByteTrackMOTModel accepts MAITE
+# detectors, and needs the test group (maite) installed. The other test files
+# are not type-checked. Wrapper conformance is checked through the entry points.
+include = ["src", "tests/typing"]
 
 [tool.ruff]
 line-length    = 120

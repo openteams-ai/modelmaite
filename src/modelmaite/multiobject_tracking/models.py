@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import importlib
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from typing import Protocol, TypedDict, TypeVar, cast
+from typing import Protocol, TypeAlias, TypedDict, TypeVar, cast
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
+from modelmaite._typing import Image, ModelMetadata
 from modelmaite.multiobject_tracking.types import MOTFrameTarget, MOTTarget
 
-_ModelMetadataValue = str | dict[int, str]
 _T = TypeVar("_T")
 
 
@@ -28,9 +28,9 @@ class _ObjectDetectionTarget(Protocol):
 
 class _ObjectDetectionModel(Protocol):
     @property
-    def metadata(self) -> Mapping[str, _ModelMetadataValue]: ...
+    def metadata(self) -> ModelMetadata: ...
 
-    def __call__(self, input_batch: Sequence[ArrayLike]) -> Sequence[_ObjectDetectionTarget]: ...
+    def __call__(self, input_batch: Sequence[Image], /) -> Sequence[_ObjectDetectionTarget]: ...
 
 
 class _VideoFrame(Protocol):
@@ -38,13 +38,16 @@ class _VideoFrame(Protocol):
     def pixels(self) -> ArrayLike: ...
 
     @property
-    def time_s(self) -> float: ...
+    def time_s(self) -> float | None: ...
 
     @property
-    def pts(self) -> int: ...
+    def pts(self) -> int | None: ...
 
     @property
     def frame_index(self) -> int: ...
+
+
+_VideoStream: TypeAlias = Iterable[_VideoFrame]
 
 
 class _Detections(Protocol):
@@ -142,18 +145,19 @@ class ByteTrackMOTModel:
         self.tracker_kwargs: ByteTrackConfig = tracker_kwargs.copy() if tracker_kwargs is not None else {}
         self._supervision, self._tracker_type = _import_tracking_dependencies()
 
-        metadata: dict[str, _ModelMetadataValue] = {"id": model_id or detector_metadata["id"]}
-        if "index2label" in detector_metadata:
-            metadata["index2label"] = _validate_index2label(detector_metadata["index2label"])
+        # An explicit model_id is used as given; an empty string falls back to the detector id without the prefix.
+        tracker_id = model_id or detector_metadata["id"]
         if model_id is None:
-            metadata["id"] = f"bytetrack_{metadata['id']}"
-        self.metadata = metadata
+            tracker_id = f"bytetrack_{tracker_id}"
+        self.metadata: ModelMetadata = {"id": tracker_id}
+        if "index2label" in detector_metadata:
+            self.metadata = {"id": tracker_id, "index2label": _validate_index2label(detector_metadata["index2label"])}
 
-    def __call__(self, input_batch: Sequence[Iterable[_VideoFrame]]) -> Sequence[MOTTarget]:
+    def __call__(self, input_batch: Sequence[_VideoStream]) -> Sequence[MOTTarget]:
         """Track objects in a batch of MAITE video streams."""
         return [self._track_stream(stream) for stream in input_batch]
 
-    def _track_stream(self, stream: Iterable[_VideoFrame]) -> MOTTarget:
+    def _track_stream(self, stream: _VideoStream) -> MOTTarget:
         tracker = self._tracker_type(**self.tracker_kwargs)
         frame_tracks: list[MOTFrameTarget] = []
 

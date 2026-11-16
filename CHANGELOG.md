@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- ModelMAITE is now tested against MAITE 0.10.3. The `maite` test dependency is `maite[experimental]>=0.10.3,<0.11`, matching CheckMAITE; the `experimental` extra brings `beartype` for `maite.spotcheck`. The test group also requires `typing-extensions>=4.13`, which maite 0.10 needs but does not declare. `maite` is still test-only and not in published metadata.
+- The `typing-extensions` runtime floor is raised from 4.5 to 4.9, the first release with `ReadOnly`.
+- Every wrapper's `metadata` is now typed as `ModelMetadata`, a TypedDict with the same fields as MAITE's (`id`, and optional `index2label`). Type checkers now accept each wrapper as a MAITE `Model`; before, none passed because `metadata` was typed as a plain `dict`. At runtime `metadata` is the same dict as before.
+- `ByteTrackMOTModel` typing follows MAITE 0.10: video frames may have `time_s` and `pts` set to `None`, and `detector` accepts any MAITE object-detection model. Only the type hints changed.
+- The `DetectionTarget` docstring states MAITE 0.10's score rule: each score is at most 1, and each row of `(n_boxes, n_classes)` scores sums to at most 1.
+
+### Added
+
+- Every model wrapper is advertised as a MAITE entry point under the protocol it implements, for example `maite.protocols.object_detection.Model`, so MAITE tooling can discover it.
+
+### Tests
+
+- Every wrapper is checked with `maite.spotcheck`, including a rejected 2-D image. `spotcheck` is used in tests only.
+- The `pyright-internal` job runs MAITE's static entry point verifier, which type-checks every advertised wrapper against its MAITE protocol. A test checks that every exported model is advertised. Pyright also checks `tests/typing/`, which checks that `ByteTrackMOTModel` accepts MAITE detectors.
+- Golden-output tests pin the outputs, `metadata["id"]`, `index2label` and `name` of every wrapper on fixed inputs. A new `test-golden` job runs them with ONNX, MOT and CPU torchvision. The VisDrone golden needs downloaded weights and runs only with `MODELMAITE_RUN_VISDRONE_INTEGRATION=1`.
+
 ## [0.2.0] - 2026-10-07
 
 ### Added
