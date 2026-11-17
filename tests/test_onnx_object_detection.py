@@ -233,3 +233,16 @@ def test_onnx_od_model_splits_batches_by_metadata_batch_size():
 
 def test_onnx_od_model_returns_empty_list_for_empty_batch():
     assert _fake_model(_FakeOnnxSession())([]) == []
+
+
+def test_onnx_od_model_id_covers_the_resize_overrides():
+    model = _fake_model(session=None)
+    model._weights_path = "model.onnx"
+    model._config_path = "model.json"
+    default = model._default_model_id()
+
+    model._image_height = 32
+    resized = model._default_model_id()
+    model._image_width = 48
+
+    assert len({default, resized, model._default_model_id()}) == 3

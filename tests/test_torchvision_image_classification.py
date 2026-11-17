@@ -293,3 +293,13 @@ def test_torchvision_ic_model_reports_unsupported_devices(monkeypatch):
 
     with pytest.raises(ValueError, match="Unsupported torch device 'tpu'"):
         TorchvisionICModel(model_name="alexnet", device="TPU")
+
+
+def test_torchvision_ic_model_id_covers_constructor_kwargs(monkeypatch):
+    _install_fake_torchvision(monkeypatch)
+
+    plain = TorchvisionICModel(model_name="alexnet", device="cpu").metadata["id"]
+    dropout = TorchvisionICModel(model_name="alexnet", device="cpu", dropout=0.2).metadata["id"]
+
+    assert plain != dropout
+    assert TorchvisionICModel(model_name="alexnet", device="cpu", dropout=0.2).metadata["id"] == dropout

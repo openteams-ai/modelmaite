@@ -281,3 +281,13 @@ def test_torchvision_rcnn_transform_pads_a_batch_to_its_largest_image():
     together, _ = transform([landscape, portrait])
 
     assert alone.tensors.shape[-2:] != together.tensors.shape[-2:]
+
+
+def test_torchvision_od_model_id_covers_constructor_kwargs(monkeypatch):
+    _install_fake_torchvision(monkeypatch)
+
+    plain = TorchvisionODModel(model_name="ssd300_vgg16", device="cpu").metadata["id"]
+    dropout = TorchvisionODModel(model_name="ssd300_vgg16", device="cpu", dropout=0.2).metadata["id"]
+
+    assert plain != dropout
+    assert TorchvisionODModel(model_name="ssd300_vgg16", device="cpu", dropout=0.2).metadata["id"] == dropout

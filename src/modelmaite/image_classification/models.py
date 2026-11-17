@@ -86,6 +86,7 @@ class TorchvisionICModel(ImageClassifierBase["torch.Tensor", "torch.Tensor"]):
         self._torch = torch = _import_torch()
         torchvision_models = _import_torchvision_models()
         self._model_name = model_name
+        self._constructor_kwargs = dict(kwargs)
         self._weights_path = weights_path
         self._config_path = config_path
         super().__init__(device=device, batch_size=batch_size)
@@ -157,7 +158,12 @@ class TorchvisionICModel(ImageClassifierBase["torch.Tensor", "torch.Tensor"]):
 
     @override
     def _id_fields(self) -> dict[str, object]:
-        return {"weights_path": self._weights_path, "config_path": self._config_path}
+        fields: dict[str, object] = {"weights_path": self._weights_path, "config_path": self._config_path}
+        # Constructor arguments change the network, so they are hashed, but only when given,
+        # so a model built without them keeps the same id.
+        if self._constructor_kwargs:
+            fields["constructor_kwargs"] = self._constructor_kwargs
+        return fields
 
 
 class OnnxICModel(JaticOnnxImageInputs, ImageClassifierBase[tuple[np.ndarray, list[tuple[int, int]]], np.ndarray]):
@@ -262,7 +268,14 @@ class OnnxICModel(JaticOnnxImageInputs, ImageClassifierBase[tuple[np.ndarray, li
 
     @override
     def _id_fields(self) -> dict[str, object]:
-        return {"weights_path": self._weights_path, "config_path": self._config_path}
+        fields: dict[str, object] = {"weights_path": self._weights_path, "config_path": self._config_path}
+        # The resize overrides change every output. They are hashed only when given, so a model
+        # that uses the ONNX metadata's size keeps the same id.
+        if self._image_height is not None:
+            fields["image_height"] = self._image_height
+        if self._image_width is not None:
+            fields["image_width"] = self._image_width
+        return fields
 
 
 class TorchvisionModelSpecification(TypedDict):

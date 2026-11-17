@@ -121,6 +121,10 @@ class ModelBase(ABC, Generic[InputT, OutputT]):
             model_id = self._default_model_id()
         if not isinstance(model_id, str):
             raise TypeError(f"model_id must be a string, got {type(model_id).__name__}.")
+        if not model_id.strip():
+            # Callers such as CheckMAITE key cached results by id, so every model with an
+            # empty id would share them.
+            raise ValueError("model_id must not be empty; pass None to use the default id.")
         if index2label is None:
             metadata: ModelMetadata = {"id": model_id}
         else:

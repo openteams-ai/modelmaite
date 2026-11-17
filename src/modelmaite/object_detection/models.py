@@ -110,6 +110,7 @@ class TorchvisionODModel(ObjectDetectorBase[DetectionTarget, "list[torch.Tensor]
         self._model_name = model_name
         self._weights_path = weights_path
         self._config_path = config_path
+        self._constructor_kwargs = dict(kwargs)
         super().__init__(device=device, batch_size=batch_size)
 
         try:
@@ -188,7 +189,16 @@ class TorchvisionODModel(ObjectDetectorBase[DetectionTarget, "list[torch.Tensor]
     def _id_fields(self) -> dict[str, object]:
         # torchvision pads every image in a batch to the batch's largest size, so which
         # images share a forward call changes the detections.
-        return {"weights_path": self._weights_path, "config_path": self._config_path, "batch_size": self.batch_size}
+        fields: dict[str, object] = {
+            "weights_path": self._weights_path,
+            "config_path": self._config_path,
+            "batch_size": self.batch_size,
+        }
+        # Constructor arguments change the network, so they are hashed, but only when given,
+        # so a model built without them keeps the same id.
+        if self._constructor_kwargs:
+            fields["constructor_kwargs"] = self._constructor_kwargs
+        return fields
 
 
 class _SmqtkBox(Protocol):
@@ -503,7 +513,14 @@ class OnnxODModel(
 
     @override
     def _id_fields(self) -> dict[str, object]:
-        return {"weights_path": self._weights_path, "config_path": self._config_path}
+        fields: dict[str, object] = {"weights_path": self._weights_path, "config_path": self._config_path}
+        # The resize overrides change every output. They are hashed only when given, so a model
+        # that uses the ONNX metadata's size keeps the same id.
+        if self._image_height is not None:
+            fields["image_height"] = self._image_height
+        if self._image_width is not None:
+            fields["image_width"] = self._image_width
+        return fields
 
 
 class TorchvisionModelSpecification(TypedDict):

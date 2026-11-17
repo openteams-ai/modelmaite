@@ -109,9 +109,11 @@ A few rules keep wrappers safe to share:
   threads at once.
 - Constructor arguments can be any objects the wrapper needs, such as a
   detector, a runtime or a processor. Whatever changes the outputs belongs in
-  `_id_fields()`. Values may be JSON values, paths, classes (hashed by name),
-  or objects whose attributes are such values (hashed by class and
-  attributes, so two equal settings objects give the same id). Anything else
+  `_id_fields()`. Values may be JSON values, NumPy scalars (hashed as the
+  Python value they hold), paths, classes (hashed by name), or objects whose
+  attributes are such values (hashed by class and attributes, so two equal
+  settings objects give the same id). Values are hashed as written, so `30`
+  and `30.0` give different ids; that only costs a cache miss. Anything else
   raises `TypeError` when the default id is built; pass `model_id` instead,
   or put the object's settings or its own id in `_id_fields()`, as trackers
   do with the detector's id.

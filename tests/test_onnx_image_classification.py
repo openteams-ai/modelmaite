@@ -379,3 +379,16 @@ def test_onnx_ic_model_runs_mixed_image_sizes_one_at_a_time(tmp_path: Path):
     model = OnnxICModel(weights_path=model_path, config_path=config_path, device="cpu")
 
     assert len(model(images)) == 2
+
+
+def test_onnx_ic_model_id_covers_the_resize_overrides():
+    model = _fake_model(session=None)
+    model._weights_path = "model.onnx"
+    model._config_path = "model.json"
+    default = model._default_model_id()
+
+    model._image_height = 32
+    resized = model._default_model_id()
+    model._image_width = 48
+
+    assert len({default, resized, model._default_model_id()}) == 3

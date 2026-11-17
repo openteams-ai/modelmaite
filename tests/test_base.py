@@ -278,6 +278,13 @@ def test_default_id_hashes_id_fields_and_model_id_wins():
         _MeanModel(model_id=3)
 
 
+@pytest.mark.parametrize("model_id", ["", "   "])
+def test_an_empty_model_id_is_rejected(model_id):
+    """CheckMAITE keys cached results by id, so every model with an empty id would share them."""
+    with pytest.raises(ValueError, match="model_id must not be empty"):
+        _MeanModel(model_id=model_id)
+
+
 class _IoU:
     """Stands in for a tracker's IoU option: an object whose attributes are its settings."""
 
@@ -296,6 +303,15 @@ def test_id_hash_canonicalises_objects_by_class_and_attributes():
     assert id_hash(estimator=_IoU) == id_hash(estimator=_IoU)
     assert id_hash(estimator=_IoU) != id_hash(estimator=_OtherIoU)
     assert len(id_hash(offset=1.0)) == 16
+
+
+def test_id_hash_reads_numpy_scalars_as_python_scalars():
+    assert id_hash(frame_rate=np.float32(30)) == id_hash(frame_rate=30.0)
+    assert id_hash(track_buffer=np.int64(30)) == id_hash(track_buffer=30)
+    assert id_hash(fuse=np.bool_(True)) == id_hash(fuse=True)
+    assert id_hash(settings={"thresholds": [np.float64(0.5)]}) == id_hash(settings={"thresholds": [0.5]})
+    # Equal numbers of different types are different settings, as with Python scalars.
+    assert id_hash(frame_rate=30) != id_hash(frame_rate=30.0)
 
 
 @pytest.mark.parametrize(
