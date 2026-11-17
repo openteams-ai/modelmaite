@@ -6,29 +6,33 @@ import hashlib
 import importlib
 import json
 import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Hashable, Iterable, Mapping
+from contextlib import AbstractContextManager
 from pathlib import Path
-from typing import Any, Literal, TypeAlias, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeAlias, TypedDict, cast
 
 import numpy as np
-from typing_extensions import NotRequired  # noqa: UP035
+from numpy.typing import NDArray
+from typing_extensions import NotRequired, override  # noqa: UP035
 
 from modelmaite._onnx import (
     IMAGE_OBJECT_DETECTION_INTERFACE,
     ONNX_INSTALL_HINT,
     UNIT_INTERVAL_TOLERANCE,
+    JaticOnnxImageInputs,
     get_index2label_from_model_config,
-    get_onnx_providers,
-    id_hash,
     import_onnxruntime,
     load_jatic_onnx_metadata,
     optional_output_int,
-    prepare_jatic_onnx_image_batch,
-    validate_input_batch,
     validate_jatic_onnx_session,
 )
-from modelmaite._typing import Image, ModelMetadata
+from modelmaite._torch import select_torch_device
+from modelmaite._typing import Image
+from modelmaite.base import ObjectDetectorBase
 from modelmaite.object_detection.types import DetectionTarget
+
+if TYPE_CHECKING:
+    import torch
 
 SUPPORTED_TORCHVISION_MODELS = {
     "fasterrcnn_resnet50_fpn": "FasterRCNN_ResNet50_FPN_Weights",
@@ -54,8 +58,13 @@ TORCHVISION_INSTALL_HINT = 'Install TorchVision support with `uv add "modelmaite
 VISDRONE_INSTALL_HINT = 'Install VisDrone support with `uv add "modelmaite[visdrone]"`.'
 
 
-class TorchvisionODModel:
-    """A MAITE-compliant wrapper for torchvision object-detection models."""
+class TorchvisionODModel(ObjectDetectorBase[DetectionTarget, "list[torch.Tensor]", "list[dict[str, torch.Tensor]]"]):
+    """A MAITE-compliant wrapper for torchvision object-detection models.
+
+    Images in a batch may have different sizes.
+    """
+
+    input_channels = (3,)
 
     def __init__(
         self,
@@ -66,6 +75,7 @@ class TorchvisionODModel:
         config_path: str | Path | None = None,
         index2label_key: str = "index2label",
         model_id: str | None = None,
+        batch_size: int | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize a torchvision object-detection model.
@@ -85,6 +95,8 @@ class TorchvisionODModel:
             Metadata key for mapping class indices to labels.
         model_id
             Optional model identifier.
+        batch_size
+            Most images per forward pass. By default the whole batch runs at once.
         **kwargs
             Additional keyword arguments forwarded to the torchvision model constructor.
         """
@@ -93,10 +105,12 @@ class TorchvisionODModel:
         if weights_path is not None and config_path is None:
             raise ValueError("Torchvision models with user weights require config_path.")
 
-        torch = _import_torch()
+        self._torch = torch = _import_torch()
         detection_models = _import_torchvision_detection_models()
         self._model_name = model_name
-        self.device = _set_torch_device(torch, device)
+        self._weights_path = weights_path
+        self._config_path = config_path
+        super().__init__(device=device, batch_size=batch_size)
 
         try:
             model_constructor = getattr(detection_models, model_name)
@@ -104,7 +118,7 @@ class TorchvisionODModel:
         except Exception as e:
             raise ImportError(f"There was an error importing {model_name} from torchvision.") from e
 
-        self.preprocess = weights_constructor.DEFAULT.transforms()
+        self.transforms = weights_constructor.DEFAULT.transforms()
         if weights_path is not None:
             config_path_for_weights = cast(str | Path, config_path)
             with Path(config_path_for_weights).open(encoding="utf-8") as f:
@@ -129,39 +143,78 @@ class TorchvisionODModel:
             self.index2label = dict(enumerate(str(label) for label in default_weights.meta["categories"]))
             self.model = model_constructor(weights=default_weights, **kwargs).to(self.device)
 
-        if model_id is None:
-            model_id = f"{self._model_name}_{id_hash(weights_path=weights_path, config_path=config_path)}"
-        self.metadata: ModelMetadata = {"id": model_id, "index2label": self.index2label}
+        self._init_metadata(model_id=model_id, index2label=self.index2label)
         self.model.eval()
-
-    def __call__(self, input_batch: Sequence[Image]) -> Sequence[DetectionTarget]:
-        """Make object-detection predictions for a CHW image batch.
-
-        Inputs should be 3-channel RGB ``uint8`` CHW images or floating-point CHW images already scaled to ``[0, 1]``.
-        """
-        torch = _import_torch()
-        images = _to_torch_images(torch, input_batch)
-        preprocessed = [self.preprocess(image) for image in images]
-        batch_on_device = _move_to_device(preprocessed, self.device)
-        with torch.no_grad():
-            predictions_batch = self.model(batch_on_device)
-        return [
-            DetectionTarget(
-                boxes=np.asarray(prediction["boxes"].detach().cpu(), dtype=np.float32),
-                labels=np.asarray(prediction["labels"].detach().cpu(), dtype=np.int64),
-                scores=np.asarray(prediction["scores"].detach().cpu(), dtype=np.float32),
-            )
-            for prediction in predictions_batch
-        ]
 
     @property
     def name(self) -> str:
         """Human-readable name for the torchvision object-detection model."""
         return self._model_name
 
+    @override
+    def preprocess(self, images: list[Image]) -> list[torch.Tensor]:
+        """Apply the torchvision transforms to each image on the CPU, then move the images to ``device``.
 
-class VisdroneODModel:
-    """A MAITE-compatible wrapper for Kitware CenterNet VisDrone detectors."""
+        Inputs should be 3-channel RGB ``uint8`` CHW images or floating-point CHW images already scaled to ``[0, 1]``.
+        """
+        return [self.transforms(self._torch.as_tensor(image)).to(self.device) for image in images]
+
+    @override
+    def forward(self, prepared: list[torch.Tensor]) -> list[dict[str, torch.Tensor]]:
+        """Return the detector's predictions: one dict of ``boxes``, ``labels`` and ``scores`` per image."""
+        return self.model(prepared)
+
+    @override
+    def postprocess(self, raw: list[dict[str, torch.Tensor]], prepared: list[torch.Tensor]) -> list[DetectionTarget]:
+        """Convert each prediction to a ``DetectionTarget`` of NumPy arrays."""
+        return [
+            DetectionTarget(
+                boxes=np.asarray(prediction["boxes"].detach().cpu(), dtype=np.float32),
+                labels=np.asarray(prediction["labels"].detach().cpu(), dtype=np.int64),
+                scores=np.asarray(prediction["scores"].detach().cpu(), dtype=np.float32),
+            )
+            for prediction in raw
+        ]
+
+    @override
+    def _resolve_device(self, requested: str | int | None) -> torch.device:
+        return select_torch_device(self._torch, requested)
+
+    @override
+    def _inference_context(self) -> AbstractContextManager[object]:
+        return self._torch.no_grad()
+
+    @override
+    def _id_fields(self) -> dict[str, object]:
+        # torchvision pads every image in a batch to the batch's largest size, so which
+        # images share a forward call changes the detections.
+        return {"weights_path": self._weights_path, "config_path": self._config_path, "batch_size": self.batch_size}
+
+
+class _SmqtkBox(Protocol):
+    """The parts of smqtk's ``AxisAlignedBoundingBox`` the VisDrone wrapper reads."""
+
+    @property
+    def min_vertex(self) -> NDArray[Any]: ...
+
+    @property
+    def max_vertex(self) -> NDArray[Any]: ...
+
+
+# smqtk's detect_objects result, as smqtk-detection declares it: per image, (box, {label: score})
+# pairs. smqtk can't be installed alongside the other extras, so the type is restated here.
+_SmqtkDetections: TypeAlias = Iterable[Iterable[tuple[_SmqtkBox, Mapping[Hashable, float]]]]
+
+
+class VisdroneODModel(ObjectDetectorBase[DetectionTarget, list[np.ndarray], _SmqtkDetections]):
+    """A MAITE-compatible wrapper for Kitware CenterNet VisDrone detectors.
+
+    The wrapped smqtk detector scales pixels by 1/255 itself, so inputs should be ``uint8`` (or 0-255) images.
+    """
+
+    input_channels = (3,)
+    same_shape_batches = True
+    input_range = (0.0, 255.0)
 
     _weights_urls = {
         "Res2Net50_Weights": "https://data.kitware.com/api/v1/item/623e18464acac99f42f40a4e/download",
@@ -213,7 +266,7 @@ class VisdroneODModel:
         device
             Device to use (for example, ``cpu`` or ``cuda``). If omitted, the best available torch device is used.
         batch_size
-            Number of images processed by the wrapped detector per batch.
+            Most images per forward pass, both in this wrapper and in the wrapped detector.
         num_workers
             Number of worker subprocesses used by the wrapped detector.
         max_dets
@@ -232,8 +285,9 @@ class VisdroneODModel:
                 f"{VISDRONE_INSTALL_HINT}"
             ) from None
 
-        torch = _import_torch(install_hint=VISDRONE_INSTALL_HINT, wrapper_name="VisDrone object-detection")
-        self.device = _set_torch_device(torch, device)
+        self._torch = _import_torch(install_hint=VISDRONE_INSTALL_HINT, wrapper_name="VisDrone object-detection")
+        self._arch = arch
+        super().__init__(device=device, batch_size=batch_size)
         self._model_name = f"centernet-{arch}" if model_name is None else model_name
 
         if model_pickle_dir is None:
@@ -272,19 +326,30 @@ class VisdroneODModel:
             11: "others",
         }
         _validate_smqtk_labels(self.model, set(self.index2label.values()))
-        if model_id is None:
-            model_id = f"visdrone_{arch}_kitware"
-        self.metadata: ModelMetadata = {"id": model_id, "index2label": self.index2label}
+        self._init_metadata(model_id=model_id, index2label=self.index2label)
 
-    def __call__(self, input_batch: Sequence[Image]) -> Sequence[DetectionTarget]:
-        """Make object-detection predictions for a CHW image batch."""
-        validate_input_batch(input_batch)
-        array_batch = [np.asarray(inp).transpose(1, 2, 0) for inp in input_batch]
-        predictions_batch = self.model.detect_objects(array_batch)
-        label2index = {label: index for index, label in self.index2label.items()}
+    @property
+    def name(self) -> str:
+        """Human-readable name for the VisDrone object-detection model."""
+        return f"visdrone-{self._model_name}"
 
+    @override
+    def preprocess(self, images: list[Image]) -> list[np.ndarray]:
+        """Return each image as an HWC array, unscaled. The wrapped detector does its own preprocessing."""
+        return [np.asarray(image).transpose(1, 2, 0) for image in images]
+
+    @override
+    def forward(self, prepared: list[np.ndarray]) -> _SmqtkDetections:
+        """Return smqtk's detections: per image, ``(bbox, {label: score})`` pairs."""
+        return self.model.detect_objects(prepared)
+
+    @override
+    def postprocess(self, raw: _SmqtkDetections, prepared: list[np.ndarray]) -> list[DetectionTarget]:
+        """Keep each box's highest-scoring label, mapped to its ``index2label`` index."""
+        label2index: dict[Hashable, int] = {label: index for index, label in self.index2label.items()}
         output_batch = []
-        for prediction in predictions_batch:
+        for image_detections in raw:
+            prediction = list(image_detections)
             num_boxes = len(prediction)
             boxes = np.empty((num_boxes, 4), dtype=np.float32)
             labels = np.empty(num_boxes, dtype=np.int64)
@@ -294,22 +359,33 @@ class VisdroneODModel:
                 boxes[i] = [min_x, min_y, max_x, max_y]
                 label, score = max(label_map.items(), key=lambda x: x[1])
                 if label not in label2index:
-                    expected = sorted(label2index)
+                    expected = sorted(self.index2label.values())
                     raise ValueError(f"VisDrone detector returned unknown label {label!r}; expected one of {expected}.")
                 labels[i] = label2index[label]
                 scores[i] = score
             output_batch.append(DetectionTarget(boxes=boxes, labels=labels, scores=scores))
-
         return output_batch
 
-    @property
-    def name(self) -> str:
-        """Human-readable name for the VisDrone object-detection model."""
-        return f"visdrone-{self._model_name}"
+    @override
+    def _resolve_device(self, requested: str | int | None) -> torch.device:
+        return select_torch_device(self._torch, requested)
+
+    @override
+    def _default_model_id(self) -> str:
+        return f"visdrone_{self._arch}_kitware"
 
 
-class OnnxODModel:
-    """A MAITE-compliant wrapper for JATIC_ONNX object-detection models."""
+_OnnxPrepared: TypeAlias = tuple[np.ndarray, list[tuple[int, int]]]
+
+
+class OnnxODModel(
+    JaticOnnxImageInputs, ObjectDetectorBase[DetectionTarget, _OnnxPrepared, tuple[np.ndarray, np.ndarray]]
+):
+    """A MAITE-compliant wrapper for JATIC_ONNX object-detection models.
+
+    Every JATIC_ONNX output slot is returned after coordinate scaling; this wrapper does not apply NMS,
+    confidence thresholding, or background filtering.
+    """
 
     def __init__(
         self,
@@ -340,7 +416,8 @@ class OnnxODModel:
         model_id
             Optional model identifier.
         batch_size
-            Optional runtime batch-size override.
+            Most images per ONNX Runtime call. Overrides the metadata ``batchSize``. If neither is set, the whole
+            batch runs at once.
         image_height
             Optional runtime input-height override.
         image_width
@@ -349,7 +426,7 @@ class OnnxODModel:
             If ``True``, run ``onnx.checker.check_model`` before creating the ONNX Runtime session. This parses the
             model separately from ONNX Runtime, so it is disabled by default for large models.
         """
-        ort = import_onnxruntime()
+        self._ort = ort = import_onnxruntime()
 
         if validate_onnx:
             try:
@@ -360,8 +437,8 @@ class OnnxODModel:
                 ) from None
             onnx.checker.check_model(str(weights_path))
 
-        self.device, providers = get_onnx_providers(device, ort=ort)
-        self.model = ort.InferenceSession(str(weights_path), providers=providers)
+        super().__init__(device=device, batch_size=batch_size)
+        self.model = ort.InferenceSession(str(weights_path), providers=self._providers)
         validate_jatic_onnx_session(self.model, expected_outputs={"boxes", "scores"})
 
         self.config, self.index2label = load_jatic_onnx_metadata(
@@ -379,31 +456,33 @@ class OnnxODModel:
                 f"ONNX metadata io.output.nClasses={n_classes} does not match len(index2label)={self._n_classes}."
             )
 
+        self._check_graph_batch_size()
         self._model_name = "jatic_onnx"
-        self._batch_size = batch_size
         self._image_height = image_height
         self._image_width = image_width
         self._n_boxes = optional_output_int(output_meta.get("nBoxes"), "nBoxes", minimum=0)
-        if model_id is None:
-            model_id = f"{self._model_name}_{id_hash(weights_path=weights_path, config_path=config_path)}"
-        self.metadata: ModelMetadata = {"id": model_id, "index2label": self.index2label}
+        self._weights_path = weights_path
+        self._config_path = config_path
+        self._init_metadata(model_id=model_id, index2label=self.index2label)
 
-    def __call__(self, input_batch: Sequence[Image]) -> Sequence[DetectionTarget]:
-        """Make object-detection predictions for a CHW image batch.
+    @property
+    def name(self) -> str:
+        """Human-readable name for JATIC_ONNX object-detection model."""
+        return self._model_name
 
-        Every JATIC_ONNX output slot is returned after coordinate scaling; this wrapper does not apply NMS,
-        confidence thresholding, or background filtering.
-        """
-        batch, original_sizes = prepare_jatic_onnx_image_batch(
-            input_batch,
-            self.config,
-            batch_size=self._batch_size,
-            image_height=self._image_height,
-            image_width=self._image_width,
-        )
-        outputs = self.model.run(["boxes", "scores"], {"image": batch})
-        boxes_batch = np.asarray(outputs[0], dtype=np.float32)
-        scores_batch = np.asarray(outputs[1], dtype=np.float32)
+    @override
+    def forward(self, prepared: _OnnxPrepared) -> tuple[np.ndarray, np.ndarray]:
+        """Run the ONNX session and return its ``boxes`` and ``scores`` outputs."""
+        batch, _ = prepared
+        boxes, scores = self.model.run(["boxes", "scores"], {"image": batch})
+        return boxes, scores
+
+    @override
+    def postprocess(self, raw: tuple[np.ndarray, np.ndarray], prepared: _OnnxPrepared) -> list[DetectionTarget]:
+        """Check the outputs, take each box's top class, and scale boxes to the original image size."""
+        boxes_batch = np.asarray(raw[0], dtype=np.float32)
+        scores_batch = np.asarray(raw[1], dtype=np.float32)
+        original_sizes = prepared[1]
         _validate_output_shapes(
             boxes_batch,
             scores_batch,
@@ -420,13 +499,11 @@ class OnnxODModel:
             pixel_boxes[:, [0, 2]] *= float(width)
             pixel_boxes[:, [1, 3]] *= float(height)
             output_batch.append(DetectionTarget(boxes=pixel_boxes, labels=labels, scores=scores))
-
         return output_batch
 
-    @property
-    def name(self) -> str:
-        """Human-readable name for JATIC_ONNX object-detection model."""
-        return self._model_name
+    @override
+    def _id_fields(self) -> dict[str, object]:
+        return {"weights_path": self._weights_path, "config_path": self._config_path}
 
 
 class TorchvisionModelSpecification(TypedDict):
@@ -533,41 +610,6 @@ def _import_torchvision_detection_models() -> Any:
             "Torchvision object-detection wrappers require optional dependency 'torchvision'. "
             f"{TORCHVISION_INSTALL_HINT}"
         ) from None
-
-
-def _set_torch_device(torch: Any, device: object | None) -> Any:
-    if device is None:
-        if torch.cuda.is_available():
-            return torch.device("cuda")
-        if torch.backends.mps.is_available():
-            return torch.device("mps")
-        return torch.device("cpu")
-    return torch.device(device)
-
-
-def _to_torch_images(torch: Any, input_batch: Sequence[Image]) -> list[Any]:
-    if len(input_batch) == 0:
-        raise ValueError("Input batch must contain at least one image.")
-
-    images = []
-    for image in input_batch:
-        arr = np.asarray(image)
-        if arr.ndim != 3:
-            raise ValueError(f"Input data must follow CHW-ordering, current shape: {arr.shape}")
-        channel_count = arr.shape[0]
-        if channel_count != 3:
-            raise ValueError(
-                "Torchvision object-detection inputs must be RGB CHW images with exactly 3 channels, "
-                f"got shape {arr.shape}."
-            )
-        images.append(torch.as_tensor(image))
-    return images
-
-
-def _move_to_device(batch: Any, device: Any) -> Any:
-    if isinstance(batch, list):
-        return [item.to(device) for item in batch]
-    return batch.to(device)
 
 
 def _download_file(url: str, destination: Path, *, expected_size: int, expected_sha512: str) -> None:

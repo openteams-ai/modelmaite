@@ -28,6 +28,7 @@ nav:
   - Home: index.md
   - Setup: setup.md
   - Usage: usage.md
+  - Write a wrapper: write_a_wrapper.md
 
 markdown_extensions:
   - admonition

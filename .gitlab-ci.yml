@@ -211,7 +211,11 @@ pyright-internal:
   script:
     # The test group brings maite for the conformance checks in tests/typing.
     - uv sync --locked --group test
-    # Checks the paths in [tool.pyright] include: src/ and tests/typing/.
+    # torch and torchvision type the torchvision wrappers. CPU wheels at the
+    # uv.lock versions, as in test-golden, to skip the CUDA libraries.
+    - uv export --locked --extra torchvision --no-hashes --no-header --no-annotate | grep -E '^torch(vision)?==' > /tmp/torch-requirements.txt
+    - uv pip install --index https://download.pytorch.org/whl/cpu -r /tmp/torch-requirements.txt
+    # Checks the paths in [tool.pyright] include: src/, tests/typing/ and docs/examples/.
     - uv run --no-sync pyright
     # Type-checks every advertised wrapper against its MAITE protocol.
     - uv run --no-sync python scripts/statically_verify_maite_entrypoints.py

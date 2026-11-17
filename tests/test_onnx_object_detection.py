@@ -219,3 +219,17 @@ def test_load_models_requires_model_type():
 def test_load_models_requires_paths():
     with pytest.raises(ValueError, match="model_weights_path"):
         load_models({"onnx_model": {"model_type": "jatic_onnx"}})
+
+
+def test_onnx_od_model_splits_batches_by_metadata_batch_size():
+    # The metadata declares batchSize 1, so three images take three ONNX Runtime calls.
+    model = _fake_model(_FakeOnnxSession())
+
+    predictions = model([np.zeros((3, 10, 20), dtype=np.uint8)] * 3)
+
+    assert len(predictions) == 3
+    np.testing.assert_array_equal(predictions[2].labels, np.array([1, 2]))
+
+
+def test_onnx_od_model_returns_empty_list_for_empty_batch():
+    assert _fake_model(_FakeOnnxSession())([]) == []

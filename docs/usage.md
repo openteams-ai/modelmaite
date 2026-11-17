@@ -14,8 +14,30 @@ models return a `DetectionTarget` per image (`boxes` in `xyxy`, `labels`,
 
 `device` is optional on the image wrappers. Torchvision and VisDrone pick the
 best available torch device; ONNX picks the best ONNX Runtime provider from the
-installed extra (`cpu`, `cuda`, or `mps` / CoreML). `ByteTrackMOTModel` has no
-`device` argument; it runs on whatever device the wrapped detector uses.
+installed extra (`cpu`, `cuda`, or `mps` / CoreML). An unsupported device
+raises `ValueError`. ONNX cannot pick a GPU by index: use `cuda` and set
+`CUDA_VISIBLE_DEVICES`. `ByteTrackMOTModel` has no `device` argument; it runs
+on whatever device the wrapped detector uses.
+
+All wrappers share a base, so they behave the same way in a few more places:
+
+- An empty batch returns an empty list.
+- `batch_size` on the image wrappers is the most images sent to the model at
+  once; a larger batch is split. By default torchvision runs the whole batch
+  at once, VisDrone uses 3, and ONNX uses the metadata `batchSize` if it is
+  set. An ONNX graph with a fixed batch dimension runs exactly that many
+  images at a time, so a batch must be a multiple of it, and `batch_size`
+  must be at least that many. `batch_size` is read-only once the model is
+  built (so are ByteTrack's `detector_batch_size` and `tracker_kwargs`): to
+  change it, build a new model, which gets its own id.
+- Every image is checked before the model runs (CHW order, channel count,
+  dtype, nonzero height and width, finite values; VisDrone also needs values
+  in `[0, 255]`), and outputs are checked against the MAITE protocol as soon
+  as each chunk (or tracker frame) is done, so a bad output stops the call
+  before the rest runs. Problems raise `ValueError`, naming the image or frame.
+
+To wrap a model of your own on the same base, see
+[Write a wrapper for your own model](write_a_wrapper.md).
 
 ## Image classification
 

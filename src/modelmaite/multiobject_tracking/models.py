@@ -3,51 +3,17 @@
 from __future__ import annotations
 
 import importlib
-from collections.abc import Iterable, Iterator, Mapping, Sequence
-from typing import Protocol, TypeAlias, TypedDict, TypeVar, cast
+from collections.abc import Mapping
+from types import MappingProxyType
+from typing import Protocol, TypedDict, cast
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
+from typing_extensions import override
 
-from modelmaite._typing import Image, ModelMetadata
-from modelmaite.multiobject_tracking.types import MOTFrameTarget, MOTTarget
-
-_T = TypeVar("_T")
-
-
-class _ObjectDetectionTarget(Protocol):
-    @property
-    def boxes(self) -> ArrayLike: ...
-
-    @property
-    def labels(self) -> ArrayLike: ...
-
-    @property
-    def scores(self) -> ArrayLike: ...
-
-
-class _ObjectDetectionModel(Protocol):
-    @property
-    def metadata(self) -> ModelMetadata: ...
-
-    def __call__(self, input_batch: Sequence[Image], /) -> Sequence[_ObjectDetectionTarget]: ...
-
-
-class _VideoFrame(Protocol):
-    @property
-    def pixels(self) -> ArrayLike: ...
-
-    @property
-    def time_s(self) -> float | None: ...
-
-    @property
-    def pts(self) -> int | None: ...
-
-    @property
-    def frame_index(self) -> int: ...
-
-
-_VideoStream: TypeAlias = Iterable[_VideoFrame]
+from modelmaite._typing import ObjectDetectionModel, ObjectDetectionTarget, VideoFrame
+from modelmaite.base import TrackerBase
+from modelmaite.multiobject_tracking.types import MOTFrameTarget
 
 
 class _Detections(Protocol):
@@ -95,7 +61,7 @@ class ByteTrackConfig(TypedDict, total=False):
 MOT_INSTALL_HINT = 'Install multi-object-tracking support with `uv add "modelmaite[mot]"`.'
 
 
-class ByteTrackMOTModel:
+class ByteTrackMOTModel(TrackerBase[_Tracker]):
     """Turn a MAITE object-detection model into a multi-object-tracking model.
 
     The wrapped detector runs on each video frame and Roboflow's ByteTrack
@@ -110,10 +76,11 @@ class ByteTrackMOTModel:
         Number of consecutive frames sent to the detector at once. Tracker
         updates remain sequential and preserve video-frame order.
     tracker_kwargs
-        Optional keyword arguments forwarded to ``trackers.ByteTrackTracker``.
+        Optional keyword arguments forwarded to ``trackers.ByteTrackTracker``. They are copied,
+        and the ``tracker_kwargs`` attribute is a read-only view of the copy.
     model_id
-        Optional model identifier. By default, it is derived from the detector's
-        metadata ID.
+        Optional model identifier. By default, it is
+        ``f"bytetrack_{detector id}_{hash of tracker_kwargs and detector_batch_size}"``.
 
     Notes
     -----
@@ -125,56 +92,41 @@ class ByteTrackMOTModel:
     track ID of ``-1``.
     """
 
+    tracker_name = "bytetrack"
+
     def __init__(
         self,
         *,
-        detector: _ObjectDetectionModel,
+        detector: ObjectDetectionModel,
         detector_batch_size: int = 1,
         tracker_kwargs: ByteTrackConfig | None = None,
         model_id: str | None = None,
     ) -> None:
-        if detector_batch_size < 1:
-            raise ValueError("detector_batch_size must be at least 1.")
-
-        detector_metadata = getattr(detector, "metadata", None)
-        if not isinstance(detector_metadata, Mapping) or not isinstance(detector_metadata.get("id"), str):
-            raise TypeError("detector must expose MAITE model metadata containing a string 'id'.")
-
-        self.detector = detector
-        self.detector_batch_size = detector_batch_size
-        self.tracker_kwargs: ByteTrackConfig = tracker_kwargs.copy() if tracker_kwargs is not None else {}
+        # A read-only copy: the kwargs are part of the id, so they must not change after construction.
+        self._tracker_kwargs: Mapping[str, object] = MappingProxyType(dict(tracker_kwargs or {}))
+        super().__init__(detector=detector, detector_batch_size=detector_batch_size, model_id=model_id)
         self._supervision, self._tracker_type = _import_tracking_dependencies()
 
-        # An explicit model_id is used as given; an empty string falls back to the detector id without the prefix.
-        tracker_id = model_id or detector_metadata["id"]
-        if model_id is None:
-            tracker_id = f"bytetrack_{tracker_id}"
-        self.metadata: ModelMetadata = {"id": tracker_id}
-        if "index2label" in detector_metadata:
-            self.metadata = {"id": tracker_id, "index2label": _validate_index2label(detector_metadata["index2label"])}
+    @property
+    def tracker_kwargs(self) -> Mapping[str, object]:
+        """A read-only copy of the keyword arguments forwarded to ``trackers.ByteTrackTracker``."""
+        return self._tracker_kwargs
 
-    def __call__(self, input_batch: Sequence[_VideoStream]) -> Sequence[MOTTarget]:
-        """Track objects in a batch of MAITE video streams."""
-        return [self._track_stream(stream) for stream in input_batch]
+    @override
+    def _id_fields(self) -> dict[str, object]:
+        # detector_batch_size decides which frames share a detector call, which can change a
+        # batch-sensitive detector's detections.
+        return {"tracker_kwargs": self.tracker_kwargs, "detector_batch_size": self.detector_batch_size}
 
-    def _track_stream(self, stream: _VideoStream) -> MOTTarget:
-        tracker = self._tracker_type(**self.tracker_kwargs)
-        frame_tracks: list[MOTFrameTarget] = []
+    @override
+    def _new_state(self) -> _Tracker:
+        return self._tracker_type(**self.tracker_kwargs)
 
-        for frames in _batched(stream, self.detector_batch_size):
-            predictions = list(self.detector([frame.pixels for frame in frames]))
-            if len(predictions) != len(frames):
-                raise ValueError(
-                    f"Object detector returned {len(predictions)} predictions for a batch of {len(frames)} frames."
-                )
-            for prediction in predictions:
-                detections = self._to_detections(prediction)
-                tracked = tracker.update(detections)
-                frame_tracks.append(self._to_frame_target(tracked))
+    @override
+    def _update(self, state: _Tracker, detections: ObjectDetectionTarget, frame: VideoFrame) -> MOTFrameTarget:
+        return self._to_frame_target(state.update(self._to_detections(detections)))
 
-        return MOTTarget(frame_tracks=frame_tracks)
-
-    def _to_detections(self, prediction: _ObjectDetectionTarget) -> _Detections:
+    def _to_detections(self, prediction: ObjectDetectionTarget) -> _Detections:
         boxes = np.asarray(prediction.boxes, dtype=np.float32)
         labels = np.asarray(prediction.labels, dtype=np.int64)
         scores = _confidence_scores(prediction.scores, labels)
@@ -202,25 +154,6 @@ def _import_tracking_dependencies() -> tuple[_SupervisionModule, _TrackerFactory
             raise ImportError(f"ByteTrack MOT models require optional dependency 'trackers'. {MOT_INSTALL_HINT}") from e
         raise
     return cast(_SupervisionModule, supervision), cast(_TrackerFactory, trackers.ByteTrackTracker)
-
-
-def _batched(stream: Iterable[_T], batch_size: int) -> Iterator[list[_T]]:
-    batch: list[_T] = []
-    for frame in stream:
-        batch.append(frame)
-        if len(batch) == batch_size:
-            yield batch
-            batch = []
-    if batch:
-        yield batch
-
-
-def _validate_index2label(value: object) -> dict[int, str]:
-    if not isinstance(value, Mapping) or not all(
-        isinstance(index, int) and isinstance(label, str) for index, label in value.items()
-    ):
-        raise TypeError("detector metadata 'index2label' must map integer indices to string labels.")
-    return dict(value)
 
 
 def _confidence_scores(scores: ArrayLike, labels: NDArray[np.int64]) -> NDArray[np.float32]:

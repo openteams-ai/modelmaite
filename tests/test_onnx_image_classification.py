@@ -253,3 +253,129 @@ def test_load_models_requires_model_type():
 def test_load_models_requires_paths():
     with pytest.raises(ValueError, match="model_weights_path"):
         load_models({"onnx_model": {"model_type": "jatic_onnx"}})
+
+
+class _RecordingOnnxSession:
+    def __init__(self):
+        self.batch_sizes = []
+
+    def run(self, output_names, feeds):
+        n_images = feeds["image"].shape[0]
+        self.batch_sizes.append(n_images)
+        return [np.tile(np.array([[0.2, 0.3, 0.5]], dtype=np.float32), (n_images, 1))]
+
+
+def test_onnx_ic_model_splits_batches_by_metadata_batch_size():
+    session = _RecordingOnnxSession()
+    model = _fake_model(session)
+
+    predictions = model([np.zeros((3, 4, 5), dtype=np.uint8)] * 5)
+
+    assert len(predictions) == 5
+    assert session.batch_sizes == [2, 2, 1]
+
+
+def test_onnx_ic_model_batch_size_overrides_metadata_batch_size():
+    session = _RecordingOnnxSession()
+    model = _fake_model(session)
+    model._batch_size = 3
+
+    model([np.zeros((3, 4, 5), dtype=np.uint8)] * 5)
+
+    assert session.batch_sizes == [3, 2]
+
+
+def test_onnx_ic_model_returns_empty_list_for_empty_batch():
+    session = _RecordingOnnxSession()
+
+    assert _fake_model(session)([]) == []
+    assert session.batch_sizes == []
+
+
+def test_onnx_ic_model_rejects_two_channel_images_before_the_model_runs():
+    session = _RecordingOnnxSession()
+
+    with pytest.raises(ValueError, match="1, 3 or 4 channels"):
+        _fake_model(session)([np.zeros((2, 4, 5), dtype=np.uint8)])
+    assert session.batch_sizes == []
+
+
+class _FakeOrt:
+    @staticmethod
+    def get_available_providers():
+        return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+
+
+def test_onnx_device_index_zero_is_accepted_and_other_indices_are_rejected():
+    from modelmaite._onnx import get_onnx_providers
+
+    assert get_onnx_providers("cuda:0", ort=_FakeOrt())[0] == "cuda"
+    with pytest.raises(ValueError, match="CUDA_VISIBLE_DEVICES"):
+        get_onnx_providers("cuda:1", ort=_FakeOrt())
+
+
+@requires_onnx_deps
+def test_onnx_ic_model_runs_a_fixed_batch_graph_exactly_that_many_images_at_a_time(tmp_path: Path):
+    model_path = tmp_path / "ic.onnx"
+    config_path = tmp_path / "model-metadata.json"
+    scores = np.array([[0.1, 0.7, 0.2], [0.8, 0.1, 0.1]], dtype=np.float32)
+    _save_constant_onnx_model(model_path, input_shape=[2, 3, 4, 5], outputs={"scores": scores})
+    config_path.write_text(json.dumps(_metadata(batch_size=-1)), encoding="utf-8")
+    images = [np.zeros((3, 4, 5), dtype=np.uint8)] * 4
+
+    model = OnnxICModel(weights_path=model_path, config_path=config_path, device="cpu")
+
+    assert len(model(images)) == 4
+    with pytest.raises(ValueError, match="multiple of 2; got 3 images"):
+        model(images[:3])
+
+
+@requires_onnx_deps
+@pytest.mark.parametrize(
+    ("metadata_batch_size", "batch_size", "message"),
+    [
+        (3, None, "ONNX metadata batchSize=3 does not match"),
+        (-1, 1, "batch_size=1 is smaller than"),
+    ],
+)
+def test_onnx_ic_model_rejects_batch_sizes_that_contradict_a_fixed_batch_graph(
+    tmp_path: Path, metadata_batch_size, batch_size, message
+):
+    model_path = tmp_path / "ic.onnx"
+    config_path = tmp_path / "model-metadata.json"
+    _save_constant_onnx_model(
+        model_path, input_shape=[2, 3, 4, 5], outputs={"scores": np.full((2, 3), 1 / 3, dtype=np.float32)}
+    )
+    config_path.write_text(json.dumps(_metadata(batch_size=metadata_batch_size)), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=f"{message} the ONNX graph's fixed batch dimension 2"):
+        OnnxICModel(weights_path=model_path, config_path=config_path, device="cpu", batch_size=batch_size)
+
+
+@requires_onnx_deps
+def test_onnx_ic_model_accepts_a_batch_size_above_a_fixed_batch_graph(tmp_path: Path):
+    model_path = tmp_path / "ic.onnx"
+    config_path = tmp_path / "model-metadata.json"
+    _save_constant_onnx_model(
+        model_path, input_shape=[2, 3, 4, 5], outputs={"scores": np.full((2, 3), 1 / 3, dtype=np.float32)}
+    )
+    config_path.write_text(json.dumps(_metadata(batch_size=-1)), encoding="utf-8")
+
+    model = OnnxICModel(weights_path=model_path, config_path=config_path, device="cpu", batch_size=8)
+
+    assert len(model([np.zeros((3, 4, 5), dtype=np.uint8)] * 4)) == 4
+
+
+@requires_onnx_deps
+def test_onnx_ic_model_runs_mixed_image_sizes_one_at_a_time(tmp_path: Path):
+    model_path = tmp_path / "ic.onnx"
+    config_path = tmp_path / "model-metadata.json"
+    _save_constant_onnx_model(
+        model_path, input_shape=[1, 3, 4, 5], outputs={"scores": np.array([[0.1, 0.7, 0.2]], dtype=np.float32)}
+    )
+    config_path.write_text(json.dumps(_metadata(batch_size=-1)), encoding="utf-8")
+    images = [np.zeros((3, 4, 5), dtype=np.uint8), np.zeros((3, 8, 10), dtype=np.uint8)]
+
+    model = OnnxICModel(weights_path=model_path, config_path=config_path, device="cpu")
+
+    assert len(model(images)) == 2

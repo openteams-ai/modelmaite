@@ -160,7 +160,8 @@ reportUnnecessaryTypeIgnoreComment = "error"
 # tests/typing holds static checks that ByteTrackMOTModel accepts MAITE
 # detectors, and needs the test group (maite) installed. The other test files
 # are not type-checked. Wrapper conformance is checked through the entry points.
-include = ["src", "tests/typing"]
+# docs/examples holds the example wrapper from the docs.
+include = ["src", "tests/typing", "docs/examples"]
 
 [tool.ruff]
 line-length    = 120

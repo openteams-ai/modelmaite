@@ -1,7 +1,7 @@
 {
  "model": {
   "metadata": {
-   "id": "bytetrack_colour-box-detector",
+   "id": "bytetrack_colour-box-detector_e5ade4af902fd52b",
    "index2label": {
     "0": "background",
     "1": "red",

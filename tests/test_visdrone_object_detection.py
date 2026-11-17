@@ -213,8 +213,18 @@ def test_visdrone_call_invalid_shape(fake_model_location, monkeypatch):
     dir_, fname = fake_model_location
     model = VisdroneODModel(arch="resnet18", device="cpu", model_pickle_dir=dir_, model_name=fname)
 
-    with pytest.raises(ValueError, match="CHW-ordering"):
+    with pytest.raises(ValueError, match="must be CHW images with exactly 3 channels"):
         model([np.zeros((224, 224, 3), dtype=np.uint8)])
+
+
+def test_visdrone_rejects_pixels_outside_0_to_255(fake_model_location, monkeypatch):
+    _install_fake_torch(monkeypatch)
+    _install_fake_smqtk(monkeypatch)
+    dir_, fname = fake_model_location
+    model = VisdroneODModel(arch="resnet18", device="cpu", model_pickle_dir=dir_, model_name=fname)
+
+    with pytest.raises(ValueError, match=r"image 0 .* outside the expected input range \[0.0, 255.0\]"):
+        model([np.full((3, 5, 7), 300.0, dtype=np.float32)])
 
 
 def test_visdrone_wrapper_returns_one_detection_target_per_input(fake_model_location, monkeypatch):
@@ -231,6 +241,22 @@ def test_visdrone_wrapper_returns_one_detection_target_per_input(fake_model_loca
     np.testing.assert_array_equal(outputs[0].labels, np.array([4]))
     np.testing.assert_allclose(outputs[0].scores, np.array([0.8], dtype=np.float32))
     assert len(outputs[1].boxes) == 0
+
+
+def test_visdrone_accepts_detections_as_any_iterables(fake_model_location, monkeypatch):
+    # smqtk-detection only promises iterables, not lists.
+    _install_fake_torch(monkeypatch)
+    _install_fake_smqtk(monkeypatch)
+    dir_, fname = fake_model_location
+    model = VisdroneODModel(arch="resnet18", device="cpu", model_pickle_dir=dir_, model_name=fname)
+    model.model.detect_objects = lambda array_batch: (
+        (detection for detection in [(_FakeBBox(), {"car": 0.8})]) for _ in array_batch
+    )
+
+    (output,) = model([np.zeros((3, 5, 7), dtype=np.uint8)])
+
+    np.testing.assert_allclose(output.boxes, np.array([[1.0, 2.0, 3.0, 4.0]], dtype=np.float32))
+    np.testing.assert_array_equal(output.labels, np.array([4]))
 
 
 def test_visdrone_rejects_unknown_prediction_label(fake_model_location, monkeypatch):
@@ -256,3 +282,42 @@ def test_load_models_dispatches_to_visdrone_wrapper(fake_model_location, monkeyp
     )
 
     assert isinstance(loaded["visdrone_model"], VisdroneODModel)
+
+
+def test_visdrone_model_returns_empty_list_for_empty_batch(fake_model_location, monkeypatch):
+    _install_fake_torch(monkeypatch)
+    _install_fake_smqtk(monkeypatch)
+    dir_, fname = fake_model_location
+    model = VisdroneODModel(arch="resnet18", device="cpu", model_pickle_dir=dir_, model_name=fname)
+
+    assert model([]) == []
+
+
+def test_visdrone_model_splits_batches_by_batch_size(fake_model_location, monkeypatch):
+    _install_fake_torch(monkeypatch)
+    _install_fake_smqtk(monkeypatch)
+    dir_, fname = fake_model_location
+    model = VisdroneODModel(arch="resnet18", device="cpu", model_pickle_dir=dir_, model_name=fname)
+    batch_sizes = []
+
+    def detect_objects(array_batch):
+        batch_sizes.append(len(array_batch))
+        return [[] for _ in array_batch]
+
+    model.model.detect_objects = detect_objects
+
+    outputs = model([np.zeros((3, 5, 7), dtype=np.uint8)] * 4)
+
+    assert len(outputs) == 4
+    assert batch_sizes == [3, 1]
+    assert _FakeCenterNetVisdrone.instances[-1].kwargs["batch_size"] == 3
+
+
+def test_visdrone_model_rejects_non_rgb_images_before_the_model_runs(fake_model_location, monkeypatch):
+    _install_fake_torch(monkeypatch)
+    _install_fake_smqtk(monkeypatch)
+    dir_, fname = fake_model_location
+    model = VisdroneODModel(arch="resnet18", device="cpu", model_pickle_dir=dir_, model_name=fname)
+
+    with pytest.raises(ValueError, match="exactly 3 channels"):
+        model([np.zeros((1, 5, 7), dtype=np.uint8)])

@@ -1,7 +1,7 @@
 {
  "model": {
   "metadata": {
-   "id": "ssdlite320_mobilenet_v3_large_bb756dc3",
+   "id": "ssdlite320_mobilenet_v3_large_b7fd1bc13031c62e",
    "index2label": {
     "0": "background",
     "1": "cat",

@@ -4,29 +4,32 @@ from __future__ import annotations
 
 import importlib
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
+from contextlib import AbstractContextManager
 from pathlib import Path
-from typing import Any, Literal, TypeAlias, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypedDict, cast
 
 import numpy as np
 from numpy.typing import NDArray
-from typing_extensions import NotRequired  # noqa: UP035
+from typing_extensions import NotRequired, override  # noqa: UP035
 
 from modelmaite._onnx import (
     IMAGE_CLASSIFICATION_INTERFACE,
     ONNX_INSTALL_HINT,
     UNIT_INTERVAL_TOLERANCE,
+    JaticOnnxImageInputs,
     get_index2label_from_model_config,
-    get_onnx_providers,
-    id_hash,
     import_onnxruntime,
     load_jatic_onnx_metadata,
     optional_output_int,
-    prepare_jatic_onnx_image_batch,
-    validate_input_batch,
     validate_jatic_onnx_session,
 )
-from modelmaite._typing import Image, ModelMetadata
+from modelmaite._torch import select_torch_device
+from modelmaite._typing import Image
+from modelmaite.base import ImageClassifierBase
+
+if TYPE_CHECKING:
+    import torch
 
 SUPPORTED_TORCHVISION_MODELS = {
     "alexnet": "AlexNet_Weights",
@@ -36,8 +39,10 @@ SUPPORTED_ONNX_MODELS = {"jatic_onnx"}
 TORCHVISION_INSTALL_HINT = 'Install TorchVision support with `uv add "modelmaite[torchvision]"`.'
 
 
-class TorchvisionICModel:
+class TorchvisionICModel(ImageClassifierBase["torch.Tensor", "torch.Tensor"]):
     """A MAITE-compliant wrapper for torchvision image-classification models."""
+
+    input_channels = (3,)
 
     def __init__(
         self,
@@ -48,6 +53,7 @@ class TorchvisionICModel:
         config_path: str | Path | None = None,
         index2label_key: str = "index2label",
         model_id: str | None = None,
+        batch_size: int | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize a torchvision image-classification model.
@@ -67,6 +73,8 @@ class TorchvisionICModel:
             Metadata key for mapping class indices to labels.
         model_id
             Optional model identifier.
+        batch_size
+            Most images per forward pass. By default the whole batch runs at once.
         **kwargs
             Additional keyword arguments forwarded to the torchvision model constructor.
         """
@@ -75,10 +83,12 @@ class TorchvisionICModel:
         if weights_path is not None and config_path is None:
             raise ValueError("Torchvision models with user weights require config_path.")
 
-        torch = _import_torch()
+        self._torch = torch = _import_torch()
         torchvision_models = _import_torchvision_models()
         self._model_name = model_name
-        self.device = _set_torch_device(torch, device)
+        self._weights_path = weights_path
+        self._config_path = config_path
+        super().__init__(device=device, batch_size=batch_size)
 
         try:
             model_constructor = getattr(torchvision_models, model_name)
@@ -86,7 +96,7 @@ class TorchvisionICModel:
         except Exception as e:
             raise ImportError(f"There was an error importing {model_name} from torchvision.") from e
 
-        self.preprocess = weights_constructor.DEFAULT.transforms()
+        self.transforms = weights_constructor.DEFAULT.transforms()
         if weights_path is not None:
             config_path_for_weights = cast(str | Path, config_path)
             with Path(config_path_for_weights).open(encoding="utf-8") as f:
@@ -106,31 +116,51 @@ class TorchvisionICModel:
             self.index2label = _index2label_from_default_weights(default_weights, model_name)
             self.model = model_constructor(weights=default_weights, **kwargs).to(self.device)
 
-        if model_id is None:
-            model_id = f"{self._model_name}_{id_hash(weights_path=weights_path, config_path=config_path)}"
-        self.metadata: ModelMetadata = {"id": model_id, "index2label": self.index2label}
+        self._init_metadata(model_id=model_id, index2label=self.index2label)
         self.model.eval()
-
-    def __call__(self, input_batch: Sequence[Image]) -> Sequence[NDArray[np.float32]]:
-        """Make image-classification predictions for a CHW image batch.
-
-        Inputs should be ``uint8`` CHW images or floating-point CHW images already scaled to ``[0, 1]``.
-        """
-        torch = _import_torch()
-        batch = _to_torch_batch(torch, input_batch)
-        batch_on_device = self.preprocess(batch).to(device=self.device, dtype=torch.float32)
-        with torch.no_grad():
-            logits_batch = self.model(batch_on_device)
-            scores_batch = torch.nn.functional.softmax(input=logits_batch, dim=1).cpu().detach()
-        return list(scores_batch.numpy().astype(np.float32, copy=False))
 
     @property
     def name(self) -> str:
         """Human-readable name for the torchvision image-classification model."""
         return self._model_name
 
+    @override
+    def preprocess(self, images: list[Image]) -> torch.Tensor:
+        """Apply the torchvision transforms to each image on the CPU, stack them, then move the batch to ``device``.
 
-class OnnxICModel:
+        Each image is resized and cropped before stacking, so images of different sizes can share a
+        batch and a batch of large images never exists at full resolution. Inputs should be ``uint8``
+        CHW images or floating-point CHW images already scaled to ``[0, 1]``.
+        """
+        torch = self._torch
+        batch = torch.stack([self.transforms(torch.as_tensor(image)) for image in images])
+        return batch.to(device=self.device, dtype=torch.float32)
+
+    @override
+    def forward(self, prepared: torch.Tensor) -> torch.Tensor:
+        """Return the model's logits."""
+        return self.model(prepared)
+
+    @override
+    def postprocess(self, raw: torch.Tensor, prepared: torch.Tensor) -> list[NDArray[np.float32]]:
+        """Apply softmax to the logits and return one score array per image."""
+        scores_batch = self._torch.nn.functional.softmax(input=raw, dim=1).cpu().detach()
+        return list(scores_batch.numpy().astype(np.float32, copy=False))
+
+    @override
+    def _resolve_device(self, requested: str | int | None) -> torch.device:
+        return select_torch_device(self._torch, requested)
+
+    @override
+    def _inference_context(self) -> AbstractContextManager[object]:
+        return self._torch.no_grad()
+
+    @override
+    def _id_fields(self) -> dict[str, object]:
+        return {"weights_path": self._weights_path, "config_path": self._config_path}
+
+
+class OnnxICModel(JaticOnnxImageInputs, ImageClassifierBase[tuple[np.ndarray, list[tuple[int, int]]], np.ndarray]):
     """A MAITE-compliant wrapper for JATIC_ONNX image-classification models."""
 
     def __init__(
@@ -162,7 +192,8 @@ class OnnxICModel:
         model_id
             Optional model identifier.
         batch_size
-            Optional runtime batch-size override.
+            Most images per ONNX Runtime call. Overrides the metadata ``batchSize``. If neither is set, the whole
+            batch runs at once.
         image_height
             Optional runtime input-height override.
         image_width
@@ -171,7 +202,7 @@ class OnnxICModel:
             If ``True``, run ``onnx.checker.check_model`` before creating the ONNX Runtime session. This parses the
             model separately from ONNX Runtime, so it is disabled by default for large models.
         """
-        ort = import_onnxruntime()
+        self._ort = ort = import_onnxruntime()
 
         if validate_onnx:
             try:
@@ -182,8 +213,8 @@ class OnnxICModel:
                 ) from None
             onnx.checker.check_model(str(weights_path))
 
-        self.device, providers = get_onnx_providers(device, ort=ort)
-        self.model = ort.InferenceSession(str(weights_path), providers=providers)
+        super().__init__(device=device, batch_size=batch_size)
+        self.model = ort.InferenceSession(str(weights_path), providers=self._providers)
         validate_jatic_onnx_session(self.model, expected_outputs={"scores"})
 
         self.config, self.index2label = load_jatic_onnx_metadata(
@@ -201,32 +232,37 @@ class OnnxICModel:
                 f"ONNX metadata io.output.nClasses={n_classes} does not match len(index2label)={self._n_classes}."
             )
 
+        self._check_graph_batch_size()
         self._model_name = "jatic_onnx"
-        self._batch_size = batch_size
         self._image_height = image_height
         self._image_width = image_width
-        if model_id is None:
-            model_id = f"{self._model_name}_{id_hash(weights_path=weights_path, config_path=config_path)}"
-        self.metadata: ModelMetadata = {"id": model_id, "index2label": self.index2label}
-
-    def __call__(self, input_batch: Sequence[Image]) -> Sequence[NDArray[np.float32]]:
-        """Make image-classification predictions for a CHW image batch."""
-        batch, _ = prepare_jatic_onnx_image_batch(
-            input_batch,
-            self.config,
-            batch_size=self._batch_size,
-            image_height=self._image_height,
-            image_width=self._image_width,
-        )
-        outputs = self.model.run(["scores"], {"image": batch})
-        scores_batch = np.asarray(outputs[0], dtype=np.float32)
-        _validate_scores(scores_batch, expected_batch_size=len(input_batch), expected_num_classes=self._n_classes)
-        return list(scores_batch)
+        self._weights_path = weights_path
+        self._config_path = config_path
+        self._init_metadata(model_id=model_id, index2label=self.index2label)
 
     @property
     def name(self) -> str:
         """Human-readable name for JATIC_ONNX image-classification model."""
         return self._model_name
+
+    @override
+    def forward(self, prepared: tuple[np.ndarray, list[tuple[int, int]]]) -> np.ndarray:
+        """Run the ONNX session and return its ``scores`` output."""
+        batch, _ = prepared
+        return self.model.run(["scores"], {"image": batch})[0]
+
+    @override
+    def postprocess(
+        self, raw: np.ndarray, prepared: tuple[np.ndarray, list[tuple[int, int]]]
+    ) -> list[NDArray[np.float32]]:
+        """Check the ``(N, C)`` probabilities and return one row per image."""
+        scores_batch = np.asarray(raw, dtype=np.float32)
+        _validate_scores(scores_batch, expected_batch_size=len(prepared[1]), expected_num_classes=self._n_classes)
+        return list(scores_batch)
+
+    @override
+    def _id_fields(self) -> dict[str, object]:
+        return {"weights_path": self._weights_path, "config_path": self._config_path}
 
 
 class TorchvisionModelSpecification(TypedDict):
@@ -304,21 +340,6 @@ def _import_torchvision_models() -> Any:
             "Torchvision image-classification wrappers require optional dependency 'torchvision'. "
             f"{TORCHVISION_INSTALL_HINT}"
         ) from None
-
-
-def _set_torch_device(torch: Any, device: object | None) -> Any:
-    if device is None:
-        if torch.cuda.is_available():
-            return torch.device("cuda")
-        if torch.backends.mps.is_available():
-            return torch.device("mps")
-        return torch.device("cpu")
-    return torch.device(device)
-
-
-def _to_torch_batch(torch: Any, input_batch: Sequence[Image]) -> Any:
-    validate_input_batch(input_batch)
-    return torch.stack([torch.as_tensor(obj) for obj in input_batch])
 
 
 def _get_config_num_classes(model_config: dict[str, Any], expected_num_classes: int, config_path: str | Path) -> int:

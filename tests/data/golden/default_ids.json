@@ -1,10 +1,9 @@
 {
  "ids": {
-  "ByteTrackMOTModel()": "bytetrack_colour-box-detector",
-  "ByteTrackMOTModel(model_id='')": "colour-box-detector",
+  "ByteTrackMOTModel()": "bytetrack_colour-box-detector_63d18f4516731324",
   "ByteTrackMOTModel(model_id='custom')": "custom",
-  "TorchvisionICModel(alexnet)": "alexnet_a67c1457",
-  "TorchvisionODModel(ssd300_vgg16)": "ssd300_vgg16_a67c1457",
+  "TorchvisionICModel(alexnet)": "alexnet_a67c1457f5e6b4d8",
+  "TorchvisionODModel(ssd300_vgg16)": "ssd300_vgg16_268d37e437b15da0",
   "VisdroneODModel(resnet18)": "visdrone_resnet18_kitware"
  }
 }

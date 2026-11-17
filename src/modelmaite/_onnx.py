@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import hashlib
 import importlib
 import json
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -20,11 +19,6 @@ IMAGE_CLASSIFICATION_INTERFACE: JaticOnnxIoInterface = "IMAGE_CLASSIFICATION"
 IMAGE_OBJECT_DETECTION_INTERFACE: JaticOnnxIoInterface = "IMAGE_OBJECT_DETECTION"
 ONNX_INSTALL_HINT = 'Install ONNX support with `uv add "modelmaite[onnx]"`.'
 UNIT_INTERVAL_TOLERANCE = 1e-6
-
-
-def id_hash(**kwargs: Any) -> str:
-    """Generate a stable eight-character hash from keyword arguments."""
-    return hashlib.sha256(json.dumps(kwargs, default=str, sort_keys=True).encode()).hexdigest()[:8]
 
 
 def get_index2label_from_model_config(
@@ -153,7 +147,12 @@ def get_onnx_providers(device: object | None, *, ort: Any | None = None) -> tupl
             return "mps", ["CoreMLExecutionProvider", "CPUExecutionProvider"]
         return "cpu", ["CPUExecutionProvider"]
 
-    requested = str(device).lower().split(":", maxsplit=1)[0]
+    requested, _, index = str(device).lower().partition(":")
+    if index not in {"", "0"}:
+        raise ValueError(
+            f"ONNX wrappers cannot select a device by index, got {device!r}. "
+            "Use 'cuda' and set CUDA_VISIBLE_DEVICES to choose the GPU."
+        )
     if requested == "cpu":
         return "cpu", ["CPUExecutionProvider"]
     if requested == "cuda":
@@ -332,3 +331,75 @@ def _interpolation_indices(input_size: int, output_size: int) -> tuple[np.ndarra
     upper = np.minimum(lower + 1, input_size - 1)
     weights = (coordinates - lower).astype(np.float32)
     return lower, upper, weights
+
+
+class JaticOnnxImageInputs:
+    """Input handling shared by the JATIC_ONNX wrappers, mixed in before their task base.
+
+    It resolves the device to ONNX Runtime providers, sizes chunks from ``batch_size`` or the
+    metadata ``batchSize``, and prepares each chunk with ``prepare_jatic_onnx_image_batch``.
+    ``batch_size`` and ``batchSize`` are limits. A graph whose ``image`` input has a fixed batch
+    dimension needs exactly that many images per run, which ``_check_graph_batch_size`` enforces.
+    """
+
+    input_channels: ClassVar[tuple[int, ...]] = (1, 3, 4)
+    same_shape_batches: ClassVar[bool] = True
+    config: dict[str, Any]
+    _image_height: int | None
+    _image_width: int | None
+    _ort: Any
+    _providers: list[str]
+    model: Any
+    _graph_batch_size: int | None = None
+
+    if TYPE_CHECKING:
+        # Provided by ImageModelBase, which comes after this mixin in the MRO.
+        @property
+        def batch_size(self) -> int | None: ...
+
+    def preprocess(self, images: list[ArrayLike]) -> tuple[np.ndarray, list[tuple[int, int]]]:
+        """Return the NCHW float32 batch and each image's original ``(height, width)``."""
+        return prepare_jatic_onnx_image_batch(
+            images,
+            self.config,
+            batch_size=self.batch_size,
+            image_height=self._image_height,
+            image_width=self._image_width,
+        )
+
+    def _check_graph_batch_size(self) -> None:
+        """Read the graph's batch dimension. Call it once ``self.model`` and ``self.config`` are set.
+
+        With a fixed dimension, every run uses exactly that many images. ``batch_size`` is a
+        ceiling, so it may be larger but not smaller. The metadata ``batchSize`` describes the
+        graph, so it must match.
+        """
+        dim = self.model.get_inputs()[0].shape[0]
+        if not isinstance(dim, int) or dim < 1:
+            return
+        if self.batch_size is not None and self.batch_size < dim:
+            raise ValueError(
+                f"batch_size={self.batch_size} is smaller than the ONNX graph's fixed batch dimension {dim}, "
+                f"which runs exactly {dim} images at a time."
+            )
+        metadata_batch_size = int(self.config.get("io", {}).get("batchSize", -1))
+        if metadata_batch_size > 0 and metadata_batch_size != dim:
+            raise ValueError(
+                f"ONNX metadata batchSize={metadata_batch_size} does not match the ONNX graph's fixed batch "
+                f"dimension {dim}."
+            )
+        self._graph_batch_size = dim
+
+    def _fixed_batch_size(self) -> int | None:
+        return self._graph_batch_size
+
+    def _chunk_size(self) -> int | None:
+        if self.batch_size is not None:
+            return self.batch_size
+        metadata_batch_size = int(self.config.get("io", {}).get("batchSize", -1))
+        # -1 means any size. Other invalid values are reported by prepare_jatic_onnx_image_batch.
+        return metadata_batch_size if metadata_batch_size > 0 else None
+
+    def _resolve_device(self, requested: str | int | None) -> str:
+        device, self._providers = get_onnx_providers(requested, ort=self._ort)
+        return device

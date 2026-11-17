@@ -232,3 +232,52 @@ def test_load_models_dispatches_to_torchvision_wrapper(monkeypatch):
     loaded = load_models({"tv_model": {"model_type": "ssd300_vgg16"}}, device="cpu")
 
     assert isinstance(loaded["tv_model"], TorchvisionODModel)
+
+
+def test_torchvision_od_model_returns_empty_list_for_empty_batch(monkeypatch):
+    _install_fake_torchvision(monkeypatch)
+    model = TorchvisionODModel(model_name="ssd300_vgg16", device="cpu")
+
+    assert model([]) == []
+    assert not _NoGrad.entered
+
+
+def test_torchvision_od_model_splits_batches_by_batch_size(monkeypatch):
+    _install_fake_torchvision(monkeypatch)
+    model = TorchvisionODModel(model_name="ssd300_vgg16", device="cpu", batch_size=2)
+    batch_sizes = []
+    forward = model.forward
+    monkeypatch.setattr(model, "forward", lambda images: batch_sizes.append(len(images)) or forward(images))
+
+    predictions = model([np.zeros((3, 4, 5), dtype=np.uint8)] * 3)
+
+    assert len(predictions) == 3
+    assert batch_sizes == [2, 1]
+    assert "batch_size" not in _FakeDetectionModel.instances[-1].kwargs
+
+
+def test_torchvision_od_model_id_covers_batch_size(monkeypatch):
+    _install_fake_torchvision(monkeypatch)
+
+    one = TorchvisionODModel(model_name="ssd300_vgg16", device="cpu", batch_size=1).metadata["id"]
+    two = TorchvisionODModel(model_name="ssd300_vgg16", device="cpu", batch_size=2).metadata["id"]
+
+    assert one != two
+
+
+def test_torchvision_rcnn_transform_pads_a_batch_to_its_largest_image():
+    """Why batch_size is in the id: a mixed-aspect batch reaches the network at a different size."""
+    try:
+        import torch
+        from torchvision.models.detection.transform import GeneralizedRCNNTransform
+    except (ImportError, RuntimeError) as exc:
+        pytest.skip(f"torchvision optional dependencies are unavailable: {exc}")
+
+    transform = GeneralizedRCNNTransform(800, 1333, [0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    transform.eval()
+    landscape, portrait = torch.rand(3, 300, 500), torch.rand(3, 500, 300)
+
+    alone, _ = transform([landscape])
+    together, _ = transform([landscape, portrait])
+
+    assert alone.tensors.shape[-2:] != together.tensors.shape[-2:]

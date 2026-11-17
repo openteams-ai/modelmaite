@@ -209,6 +209,38 @@ def test_torchvision_ic_real_preprocessing_contract():
     assert processed.dtype == torch.float32
 
 
+def test_torchvision_ic_model_transforms_each_image_before_stacking(monkeypatch):
+    _install_fake_torchvision(monkeypatch)
+    model = TorchvisionICModel(model_name="alexnet", device="cpu", batch_size=2)
+    seen = []
+
+    def resize(image):
+        seen.append(tuple(np.asarray(image).shape))
+        return _FakeTensor(np.zeros((3, 2, 2), dtype=np.float32))
+
+    model.transforms = resize
+
+    predictions = model([np.zeros((3, 4, 5), dtype=np.uint8), np.zeros((3, 8, 6), dtype=np.uint8)])
+
+    assert len(predictions) == 2
+    assert seen == [(3, 4, 5), (3, 8, 6)]
+
+
+def test_torchvision_ic_real_transforms_give_the_same_batch_per_image():
+    try:
+        import torch
+        import torchvision.models as torchvision_models
+    except (ImportError, RuntimeError) as exc:
+        pytest.skip(f"torchvision optional dependencies are unavailable: {exc}")
+
+    transforms = torchvision_models.AlexNet_Weights.DEFAULT.transforms()
+    images = torch.randint(0, 256, (2, 3, 300, 400), dtype=torch.uint8)
+
+    per_image = torch.stack([transforms(image) for image in images])
+
+    assert torch.equal(per_image, transforms(images))
+
+
 def test_torchvision_ic_model_rejects_unsupported_model_name():
     with pytest.raises(ValueError, match="not currently supported"):
         TorchvisionICModel(model_name="not_a_model")
@@ -220,3 +252,44 @@ def test_load_models_dispatches_to_torchvision_wrapper(monkeypatch):
     loaded = load_models({"tv_model": {"model_type": "alexnet"}}, device="cpu")
 
     assert isinstance(loaded["tv_model"], TorchvisionICModel)
+
+
+def test_torchvision_ic_model_returns_empty_list_for_empty_batch(monkeypatch):
+    _install_fake_torchvision(monkeypatch)
+    model = TorchvisionICModel(model_name="alexnet", device="cpu")
+
+    assert model([]) == []
+
+
+def test_torchvision_ic_model_splits_batches_by_batch_size(monkeypatch):
+    _install_fake_torchvision(monkeypatch)
+    model = TorchvisionICModel(model_name="alexnet", device="cpu", batch_size=2)
+    batch_sizes = []
+    forward = model.forward
+    monkeypatch.setattr(model, "forward", lambda batch: batch_sizes.append(batch.shape[0]) or forward(batch))
+
+    predictions = model([np.zeros((3, 4, 5), dtype=np.uint8)] * 5)
+
+    assert len(predictions) == 5
+    assert batch_sizes == [2, 2, 1]
+    assert "batch_size" not in _FakeModel.instances[-1].kwargs
+
+
+def test_torchvision_ic_model_rejects_non_rgb_images_before_the_model_runs(monkeypatch):
+    _install_fake_torchvision(monkeypatch)
+    model = TorchvisionICModel(model_name="alexnet", device="cpu")
+
+    with pytest.raises(ValueError, match="exactly 3 channels"):
+        model([np.zeros((1, 4, 5), dtype=np.uint8)])
+
+
+def test_torchvision_ic_model_reports_unsupported_devices(monkeypatch):
+    _install_fake_torchvision(monkeypatch)
+
+    def device(name):
+        raise RuntimeError(f"Invalid device string: '{name}'")
+
+    monkeypatch.setattr(sys.modules["torch"], "device", device)
+
+    with pytest.raises(ValueError, match="Unsupported torch device 'tpu'"):
+        TorchvisionICModel(model_name="alexnet", device="TPU")

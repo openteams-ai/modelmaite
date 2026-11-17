@@ -106,10 +106,8 @@ def test_bytetrack_mot_model_tracks_any_maite_detector_and_resets_per_video():
     first, second = model([_frames(), _frames(3)])
 
     assert isinstance(model, mot.Model)
-    assert model.metadata == {
-        "id": "bytetrack_moving-detector",
-        "index2label": {0: "background", 1: "object"},
-    }
+    assert model.metadata["id"].startswith("bytetrack_moving-detector_")
+    assert model.metadata["index2label"] == {0: "background", 1: "object"}
     assert detector.batch_sizes == [2, 1, 2, 1]
     _assert_maite_mot_target(first)
     _assert_maite_mot_target(second)
@@ -147,6 +145,50 @@ def test_bytetrack_mot_model_rejects_invalid_detector_batch_size():
 def test_bytetrack_mot_model_requires_detector_metadata():
     with pytest.raises(TypeError, match="metadata"):
         ByteTrackMOTModel(detector=object())
+
+
+def test_bytetrack_mot_model_id_covers_tracker_kwargs_and_detector_batch_size(monkeypatch):
+    monkeypatch.setattr(mot_models, "_import_tracking_dependencies", lambda: (object(), object()))
+    default = ByteTrackMOTModel(detector=_MovingDetector()).metadata["id"]
+    tuned = ByteTrackMOTModel(detector=_MovingDetector(), tracker_kwargs={"lost_track_buffer": 5}).metadata["id"]
+    batched = ByteTrackMOTModel(detector=_MovingDetector(), detector_batch_size=4).metadata["id"]
+
+    assert default.startswith(f"bytetrack_{_MovingDetector().metadata['id']}_")
+    assert tuned != default
+    assert batched != default
+
+
+def test_bytetrack_mot_model_tracker_kwargs_are_a_read_only_copy(monkeypatch):
+    created = []
+    monkeypatch.setattr(
+        mot_models, "_import_tracking_dependencies", lambda: (object(), lambda **kwargs: created.append(kwargs))
+    )
+    kwargs = {"lost_track_buffer": 5}
+    model = ByteTrackMOTModel(detector=_MovingDetector(), tracker_kwargs=kwargs)
+    kwargs["lost_track_buffer"] = 6
+
+    assert model.tracker_kwargs == {"lost_track_buffer": 5}
+    with pytest.raises(TypeError):
+        model.tracker_kwargs["lost_track_buffer"] = 7
+    with pytest.raises(AttributeError):
+        model.tracker_kwargs = {}
+    with pytest.raises(AttributeError):
+        model.detector_batch_size = 2
+    model._new_state()
+    assert created == [{"lost_track_buffer": 5}]
+
+
+@requires_mot_runtime
+def test_bytetrack_mot_model_id_hashes_iou_objects_by_their_settings():
+    import trackers
+
+    def model_id(iou):
+        return ByteTrackMOTModel(detector=_MovingDetector(), tracker_kwargs={"iou": iou}).metadata["id"]
+
+    assert model_id(trackers.IoU()) == model_id(trackers.IoU())
+    assert model_id(trackers.BIoU(buffer_ratio=0.2)) == model_id(trackers.BIoU(buffer_ratio=0.2))
+    assert model_id(trackers.BIoU(buffer_ratio=0.3)) != model_id(trackers.BIoU(buffer_ratio=0.2))
+    assert model_id(trackers.BIoU()) != model_id(trackers.IoU())
 
 
 def test_bytetrack_mot_model_has_actionable_optional_dependency_error(monkeypatch):

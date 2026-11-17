@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `modelmaite.base` holds the base classes every wrapper is now built on: `ModelBase`, `ImageModelBase`, `ImageClassifierBase`, `ObjectDetectorBase` and `TrackerBase`. They share input checks, batching, device handling, metadata and output checks across wrappers. You can use them to wrap your own model. A classifier or detector on the base needs `index2label`, as CheckMAITE's conventions require of models. A wrapper on the base needs `model_id`, or an `_id_fields()` method listing the settings that change its outputs, which are hashed into the default id; a tracker's default id also includes its detector's id. The base classes are new and their hook names may still change before 1.0.
+- `ObjectDetectorBase` takes its output type as its first type parameter, `ObjectDetectorBase[TargetT, PreparedT, RawT]`. `TargetT` is any type with `boxes`, `labels` and `scores`, so a detector can return its own type with extra fields. The built-in detectors return `DetectionTarget` as before.
+- `_init_metadata(..., extra=...)` adds other keys to a wrapper's `metadata`. It cannot set `id`, `index2label` or another key `ModelMetadata` defines.
+- `batch_size` on `TorchvisionICModel` and `TorchvisionODModel`. It defaults to `None`, which runs the whole batch at once, as before.
+
 ### Changed
 
 - ModelMAITE is now tested against MAITE 0.10.3. The `maite` test dependency is `maite[experimental]>=0.10.3,<0.11`, matching CheckMAITE; the `experimental` extra brings `beartype` for `maite.spotcheck`. The test group also requires `typing-extensions>=4.13`, which maite 0.10 needs but does not declare. `maite` is still test-only and not in published metadata.
@@ -14,6 +21,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Every wrapper's `metadata` is now typed as `ModelMetadata`, a TypedDict with the same fields as MAITE's (`id`, and optional `index2label`). Type checkers now accept each wrapper as a MAITE `Model`; before, none passed because `metadata` was typed as a plain `dict`. At runtime `metadata` is the same dict as before.
 - `ByteTrackMOTModel` typing follows MAITE 0.10: video frames may have `time_s` and `pts` set to `None`, and `detector` accepts any MAITE object-detection model. Only the type hints changed.
 - The `DetectionTarget` docstring states MAITE 0.10's score rule: each score is at most 1, and each row of `(n_boxes, n_classes)` scores sums to at most 1.
+- The wrappers are now built on `modelmaite.base`. Their outputs are unchanged, and so is `metadata["id"]` except for `ByteTrackMOTModel` and `TorchvisionODModel`. The entries below are what users can notice.
+- **Breaking:** `ByteTrackMOTModel`'s default `metadata["id"]` is now `bytetrack_{detector id}_{hash}`, where the hash covers `tracker_kwargs` and `detector_batch_size`, so trackers with different settings no longer share an id.
+- **Breaking:** `TorchvisionODModel`'s default `metadata["id"]` now covers `batch_size`. torchvision pads every image in a batch to the batch's largest size, so batch composition changes the detections, and CheckMAITE must not reuse results computed with another batch size. Cached CheckMAITE results for ByteTrack models are not reused. `model_id=""` no longer falls back to the detector's id; it is used as given.
+- **Breaking:** default ids are built from a canonical form of the settings, and their hash is 16 hex characters instead of 8, so every hashed default id changes. An object setting, such as ByteTrack's `iou`, is hashed by its class and attributes rather than by `str()`, which could include a memory address: equal settings now give the same id. A setting with no canonical form raises `TypeError` asking for `model_id`.
+- **Breaking:** `batch_size` on the image wrappers, and `detector_batch_size` and `tracker_kwargs` on `ByteTrackMOTModel`, are read-only once the model is built, because they are part of the default id. Assigning them raises `AttributeError`; `tracker_kwargs` is a read-only copy. Build a new model to change them.
+- **Breaking:** a classifier's `index2label` keys must be exactly `0..n-1`, since score `i` is the score of label `i`. Other keys, such as `{1: "cat", 2: "dog"}` in an ONNX or torchvision config, raise `ValueError` when the model is loaded. Detectors are unchanged.
+- **An empty batch now returns an empty list.** The image wrappers used to raise `ValueError` ("Input batch must contain at least one image."). `ByteTrackMOTModel` already returned an empty list.
+- `batch_size` means the same thing on every image wrapper: the most images sent to the model at once. A larger batch is split into several calls and the outputs are joined in order. On `OnnxICModel` and `OnnxODModel`, a batch larger than `batch_size`, or than a fixed metadata `batchSize`, used to raise `ValueError`; it is now split. If the ONNX graph's `image` input has a fixed batch dimension, every run uses exactly that many images: a batch that is not a multiple of it raises `ValueError` before the model runs, a `batch_size` smaller than it, or a metadata `batchSize` that differs from it, raises `ValueError` when the model is loaded. A larger `batch_size` is accepted, since it is a maximum. `VisdroneODModel` keeps its default of 3.
+- Images are checked before the model runs, with the same messages in every wrapper: CHW order, the channel counts the wrapper supports, and an integer or floating-point dtype. `TorchvisionICModel` and `VisdroneODModel` now reject images without exactly 3 channels up front; before, they failed later inside torch, cv2 or smqtk. The ONNX wrappers reject 2-channel images up front. Images of different sizes only need to match within one model call, so `batch_size=1` (or an ONNX graph fixed at one image) accepts mixed sizes; before, the whole batch had to match.
+- Every image is also checked, before any of the batch runs, for a nonzero height and width and, for float images, finite values. A wrapper can set `input_range`; `VisdroneODModel` sets `(0, 255)`, since smqtk divides by 255 itself. The error names the image.
+- Outputs are checked against the MAITE protocol before they are returned: one output per input, classifier scores finite and in `[0, 1]` with one score per label, detections with MAITE's box, label and score rules (with `index2label`, per-class scores need at least one column per label), and each frame of `ByteTrackMOTModel`'s tracks with MAITE's tracking rules. Boxes and scores must be finite. A wrapper that breaks them raises `ValueError`, naming the image or frame. Each chunk of images, and each tracker frame, is checked before the next one runs.
+- `device` is handled the same way in every wrapper. An unsupported device now raises `ValueError` in the torch-based wrappers too (it was torch's `RuntimeError`). The ONNX wrappers now raise `ValueError` for a device index other than 0, such as `cuda:1`; before, the index was silently dropped and GPU 0 was used. Device names are no longer case-sensitive.
+- **Breaking:** `TorchvisionICModel.preprocess` and `TorchvisionODModel.preprocess` are now the base-class preprocessing step, which takes a list of images. The torchvision transforms they used to hold moved to a new `transforms` attribute; call `model.transforms(tensor)` instead of `model.preprocess(tensor)`.
+- `TorchvisionICModel` applies its transforms to each image before stacking, so a batch can mix image sizes at any `batch_size`, and large images are resized before a full-resolution batch is built (about half the peak memory for 4K images). The preprocessed batch is unchanged.
+- `batch_size` is no longer forwarded to the torchvision model constructor by `TorchvisionICModel` and `TorchvisionODModel`. Torchvision models do not accept it.
+
+### Documentation
+
+- A new "Write a wrapper for your own model" page explains the base classes, with an example classifier that runs in the test suite and is type-checked in CI.
+- The usage page describes the behaviour all wrappers now share.
+- The wrapper guide says that a model id is not a record of a run, and that MAITE predictions are not all a model produces.
 
 ### Added
 

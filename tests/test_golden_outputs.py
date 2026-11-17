@@ -565,13 +565,12 @@ def test_default_ids_match_goldens(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     (tmp_path / "centernet-resnet18.pth").write_bytes(b"unused")
     ids["VisdroneODModel(resnet18)"] = VisdroneODModel(arch="resnet18", model_pickle_dir=tmp_path).metadata["id"]
 
-    # ByteTrack builds its id from the detector id unless model_id is given.
+    # ByteTrack builds its id from the detector id and tracker_kwargs unless model_id is given.
     detector = _ColourBoxDetector()
     monkeypatch.setattr(
         "modelmaite.multiobject_tracking.models._import_tracking_dependencies", lambda: (object(), object())
     )
     ids["ByteTrackMOTModel()"] = ByteTrackMOTModel(detector=detector).metadata["id"]
     ids["ByteTrackMOTModel(model_id='custom')"] = ByteTrackMOTModel(detector=detector, model_id="custom").metadata["id"]
-    ids["ByteTrackMOTModel(model_id='')"] = ByteTrackMOTModel(detector=detector, model_id="").metadata["id"]
 
     _check_golden("default_ids.json", "ids", ids)
